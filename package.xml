@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>leo_docking</name>
+  <version>1.0.0</version>
+  <description>Package containing nodes performing autonomous docking to the powering station.</description>
+
+  <maintainer email="support@fictionlab.pl">Fictionlab</maintainer>
+  <author email="aleks@fictionlab.pl">Aleksander Szymański</author>
+
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>smach</exec_depend>
+  <exec_depend>smach_ros</exec_depend>
+  <exec_depend>python3-pykdl</exec_depend>
+  <exec_depend>rospy</exec_depend>  
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>aruco_opencv</exec_depend>
+</package>

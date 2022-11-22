@@ -1,0 +1,126 @@
+#!usr/bin/env python
+
+import rospy
+import smach
+import smach_ros
+
+from leo_docking.states import (
+    StartState,
+    CheckArea,
+    RideToDockArea,
+    RotateToMarker,
+    RotateToDockArea,
+    ReachingDockingPoint,
+    RotateToDockingPoint,
+    ReachingDockingOrientation,
+    DockingRover,
+)
+
+
+if __name__ == "__main__":
+    rospy.init_node("leo_docking", log_level=rospy.INFO)
+
+    sm = smach.StateMachine(
+        outcomes=["ROVER DOCKED", "DOCKING FAILED"],
+    )
+
+    with sm:
+        smach.StateMachine.add(
+            "Start",
+            StartState(timeout=5.0),
+            transitions={"marker_not_found": "DOCKING FAILED", "marker_found": "CheckArea"},
+        )
+
+        smach.StateMachine.add(
+            "CheckArea",
+            CheckArea(timeout=5, threshold_angle=0.17),
+            transitions={
+                "marker_lost": "DOCKING FAILED",
+                "docking_area": "Reaching Docking Position",
+                "outside_docking_area": "Reaching Docking Area",
+            },
+            remapping={"target_pose": "docking_area_data"},
+        )
+
+        reaching_docking_area = smach.Sequence(
+            outcomes=["succeeded", "odometry_not_working"],
+            connector_outcome="succeeded",
+            input_keys=["docking_area_data"],
+        )
+
+        with reaching_docking_area:
+            smach.Sequence.add(
+                "Rotate Towards Area",
+                RotateToDockArea(timeout=2.0),
+                remapping={
+                    "target_pose": "docking_area_data",
+                },
+            )
+            smach.Sequence.add(
+                "Ride To Area",
+                RideToDockArea(timeout=2.0),
+                remapping={
+                    "target_pose": "docking_area_data",
+                },
+            )
+            smach.Sequence.add(
+                "Rotate Towards Marker",
+                RotateToMarker(timeout=2.0),
+                remapping={
+                    "target_pose": "docking_area_data",
+                },
+            )
+
+        smach.StateMachine.add(
+            "Reaching Docking Area",
+            reaching_docking_area,
+            transitions={"succeeded": "CheckArea", "odometry_not_working": "DOCKING FAILED"},
+        )
+
+        reaching_docking_position = smach.Sequence(
+            outcomes=["succeeded", "odometry_not_working", "marker_lost"],
+            connector_outcome="succeeded",
+        )
+
+        with reaching_docking_position:
+            smach.Sequence.add(
+                "Rotate To Docking Point",
+                RotateToDockingPoint(timeout=2.0, docking_point_distance=0.8),
+            )
+
+            smach.Sequence.add(
+                "Reaching Docking Point",
+                ReachingDockingPoint(timeout=2.0, docking_point_distance=0.8),
+            )
+
+            smach.Sequence.add(
+                "Reaching Dockin Orientation",
+                ReachingDockingOrientation(timeout=2.0, docking_point_distance=0.8),
+            )
+
+        smach.StateMachine.add(
+            "Reaching Docking Position",
+            reaching_docking_position,
+            transitions={
+                "succeeded": "Docking Rover",
+                "odometry_not_working": "DOCKING FAILED",
+                "marker_lost": "DOCKING FAILED",
+            },
+        )
+
+        smach.StateMachine.add(
+            "Docking Rover",
+            DockingRover(),
+            transitions={
+                "succeeded": "ROVER DOCKED",
+                "odometry_not_working": "DOCKING FAILED",
+                "marker_lost": "DOCKING FAILED",
+            },
+        )
+
+    sis = smach_ros.IntrospectionServer("leo_docking", sm, "/LEO_DOCKING")
+    sis.start()
+
+    outcome = sm.execute()
+
+    sis.stop()
