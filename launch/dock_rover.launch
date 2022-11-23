@@ -1,0 +1,10 @@
+<launch>
+    <node name="follow_ar_tag" pkg="leo_example_follow_ar_tag" type="follow_ar_tag.py" clear_params="true" outpu="screen">
+        <rosparam command="load" file="$(find leo_docking)/config/docking_config.yaml" />
+    </node>
+
+    <!-- <include file="$(find aruco_opencv)/launch/single_marker_tracker.launch"/> -->
+    <node name="aruco_tracker" pkg="nodelet" type="nodelet" args="standalone aruco_opencv/SingleMarkerTracker">
+        <rosparam command="load" file="$(find aruco_opencv)/config/single_marker_tracker.yaml" />
+    </node>
+</launch>
