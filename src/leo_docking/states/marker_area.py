@@ -4,7 +4,6 @@ from threading import Event, Lock
 import rospy
 import smach
 import PyKDL
-import tf2_ros
 
 from aruco_opencv_msgs.msg import MarkerDetection, MarkerPose
 from geometry_msgs.msg import Twist
@@ -34,13 +33,16 @@ class CheckArea(smach.State):
     ):
         super().__init__(outcomes=outcomes, output_keys=output_keys)
 
-        self.threshold_angle = threshold_angle
-        self.timeout = timeout
-        self.docking_distance = docking_distance
-        self.marker_flag = Event()
+        self.threshold_angle = rospy.get_param("~threshold_angle",threshold_angle)
+        self.docking_distance = rospy.get_param("~docking_distance",docking_distance)
 
-        self.seq = 0
-        self.br = tf2_ros.TransformBroadcaster()
+        if rospy.has_param("~check_area/timeout"):
+            self.timeout = rospy.get_param("~check_area/timeout", timeout)
+        else:
+            self.timeout = rospy.get_param("~timeout", timeout)
+        
+
+        self.marker_flag = Event()
 
     def marker_callback(self, data: MarkerDetection):
         """Function called everu time, there is new MarkerDetection message published on the topic.
@@ -122,6 +124,7 @@ class BaseDockAreaState(smach.State):
         angle=True,
     ):
         super().__init__(outcomes, input_keys, output_keys)
+        
         self.timeout = timeout
         self.speed_min = speed_min
         self.speed_max = speed_max
@@ -260,6 +263,23 @@ class RotateToDockArea(BaseDockAreaState):
         epsilon=0.1,
         angle=True,
     ):
+        if rospy.has_param("~rotate_to_dock_area/timeout"):
+            timeout = rospy.get_param("~rotate_to_dock_area/timeout", timeout)
+        else:
+            timeout = rospy.get_param("~timeout", timeout)
+
+        if rospy.has_param("~rotate_to_dock_area/epsilon"):
+            epsilon = rospy.get_param("~rotate_to_dock_area/epsilon", epsilon)
+        else:
+            epsilon = rospy.get_param("~epsilon", epsilon)
+        
+        
+        speed_min = rospy.get_param("~rotate_to_dock_area/speed_min", speed_min)
+        speed_max = rospy.get_param("~rotate_to_dock_area/speed_max", speed_max)
+        angle_min = rospy.get_param("~rotate_to_dock_area/angle_min", angle_min)
+        angle_max = rospy.get_param("~rotate_to_dock_area/angle_max", angle_max)
+        
+        
         super().__init__(
             timeout=timeout,
             speed_min=speed_min,
@@ -291,6 +311,22 @@ class RideToDockArea(BaseDockAreaState):
         epsilon=0.1,
         angle=False,
     ):
+        if rospy.has_param("~ride_to_dock_area/timeout"):
+            timeout = rospy.get_param("~ride_to_dock_area/timeout", timeout)
+        else:
+            timeout = rospy.get_param("~timeout", timeout)
+
+        if rospy.has_param("~ride_to_dock_area/epsilon"):
+            epsilon = rospy.get_param("~ride_to_dock_area/epsilon", epsilon)
+        else:
+            epsilon = rospy.get_param("~epsilon", epsilon)
+        
+        
+        speed_min = rospy.get_param("~ride_to_dock_area/speed_min", speed_min)
+        speed_max = rospy.get_param("~ride_to_dock_area/speed_max", speed_max)
+        distance_min = rospy.get_param("~ride_to_dock_area/distance_min", distance_min)
+        distance_max = rospy.get_param("~ride_to_dock_area/distance_max", distance_max)
+        
         super().__init__(
             timeout=timeout,
             speed_min=speed_min,
@@ -323,6 +359,21 @@ class RotateToMarker(BaseDockAreaState):
         epsilon=0.1,
         angle=True,
     ):
+        if rospy.has_param("~rotate_to_marker/timeout"):
+            timeout = rospy.get_param("~rotate_to_marker/timeout", timeout)
+        else:
+            timeout = rospy.get_param("~timeout", timeout)
+
+        if rospy.has_param("~rotate_to_marker/epsilon"):
+            epsilon = rospy.get_param("~rotate_to_marker/epsilon", epsilon)
+        else:
+            epsilon = rospy.get_param("~epsilon", epsilon)
+        
+        
+        speed_min = rospy.get_param("~rotate_to_marker/speed_min", speed_min)
+        speed_max = rospy.get_param("~rotate_to_marker/speed_max", speed_max)
+        angle_min = rospy.get_param("~rotate_to_marker/angle_min", angle_min)
+        angle_max = rospy.get_param("~rotate_to_marker/angle_max", angle_max)
         super().__init__(
             output_keys=output_keys,
             timeout=timeout,

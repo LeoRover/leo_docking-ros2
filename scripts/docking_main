@@ -28,7 +28,10 @@ if __name__ == "__main__":
         smach.StateMachine.add(
             "Start",
             StartState(timeout=5.0),
-            transitions={"marker_not_found": "DOCKING FAILED", "marker_found": "CheckArea"},
+            transitions={
+                "marker_not_found": "DOCKING FAILED",
+                "marker_found": "CheckArea",
+            },
         )
 
         smach.StateMachine.add(
@@ -74,7 +77,10 @@ if __name__ == "__main__":
         smach.StateMachine.add(
             "Reaching Docking Area",
             reaching_docking_area,
-            transitions={"succeeded": "CheckArea", "odometry_not_working": "DOCKING FAILED"},
+            transitions={
+                "succeeded": "CheckArea",
+                "odometry_not_working": "DOCKING FAILED",
+            },
         )
 
         reaching_docking_position = smach.Sequence(

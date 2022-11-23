@@ -14,7 +14,12 @@ class StartState(smach.State):
         self.marker_sub = rospy.Subscriber(
             "marker_detections", MarkerDetection, self.marker_callback, queue_size=1
         )
-        self.timeout = timeout
+        
+        if rospy.has_param("~start_state/timeout"):
+            self.timeout = rospy.get_param("~start_state/timeout", timeout)
+        else:
+            self.timeout = rospy.get_param("~timeout", timeout)
+        
         self.marker_flag: Event = Event()
 
     def marker_callback(self, data: MarkerDetection):
