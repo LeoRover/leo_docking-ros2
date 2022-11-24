@@ -1,5 +1,5 @@
 <launch>
-    <node name="follow_ar_tag" pkg="leo_example_follow_ar_tag" type="follow_ar_tag.py" clear_params="true" outpu="screen">
+    <node name="leo_docking" pkg="leo_docking" type="docking_main" clear_params="true" output="screen">
         <rosparam command="load" file="$(find leo_docking)/config/docking_config.yaml" />
     </node>
 

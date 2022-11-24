@@ -234,28 +234,41 @@ class RotateToDockingPoint(BaseDockingState):
         angle_max=1.0,
         epsilon=0.01,
         docking_point_distance=0.6,
-        debug=True,
+        debug=False,
         angular=True,
     ):
+        rospy.logerr(f"timeout: before: {timeout}")
         if rospy.has_param("~rotate_to_docking_point/timeout"):
             timeout = rospy.get_param("~rotate_to_docking_point/timeout", timeout)
+            rospy.logerr(f"timeout: local: {timeout}")
         else:
             timeout = rospy.get_param("~timeout", timeout)
+            rospy.logerr(f"timeout: global: {timeout}")
 
+        rospy.logerr(f"epsilon: before: {epsilon}")
         if rospy.has_param("~rotate_to_docking_point/epsilon"):
             epsilon = rospy.get_param("~rotate_to_docking_point/epsilon", epsilon)
+            rospy.logerr(f"epsilon: local: {epsilon}")
         else:
             epsilon = rospy.get_param("~epsilon", epsilon)
+            rospy.logerr(f"epsilon: global: {epsilon}")
 
+        
+        rospy.logerr(f"docking_point_distance: before: {docking_point_distance}")
         docking_point_distance = rospy.get_param(
             "~docking_point_distance", docking_point_distance
         )
+        rospy.logerr(f"docking_point_distance: after: {docking_point_distance}")
+        rospy.logerr(f"debug: before: {debug}")
         debug = rospy.get_param("~debug", debug)
+        rospy.logerr(f"debug: after: {debug}")
 
+        rospy.logerr(f"{speed_min} {speed_max} {angle_min} {angle_max}")
         speed_min = rospy.get_param("~rotate_to_docking_point/speed_min", speed_min)
         speed_max = rospy.get_param("~rotate_to_docking_point/speed_max", speed_max)
         angle_min = rospy.get_param("~rotate_to_docking_point/angle_min", angle_min)
         angle_max = rospy.get_param("~rotate_to_docking_point/angle_max", angle_max)
+        rospy.logerr(f"{speed_min} {speed_max} {angle_min} {angle_max}")
 
         super().__init__(
             timeout=timeout,
