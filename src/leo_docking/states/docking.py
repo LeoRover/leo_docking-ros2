@@ -40,7 +40,6 @@ class BaseDockingState(smach.State):
         debug=False,
         angle=True,
     ):
-
         super().__init__(outcomes)
         self.timeout = timeout
         self.speed_min = speed_min
@@ -225,7 +224,7 @@ class RotateToDockingPoint(BaseDockingState):
     """The first state of the sequence state machine getting rover to docking position;
     responsible for rotating the rover towards the target point (default: 0.6m in straight line from docking base)."""
 
-    def _init__(
+    def __init__(
         self,
         timeout=3.0,
         speed_min=0.1,
@@ -234,46 +233,33 @@ class RotateToDockingPoint(BaseDockingState):
         angle_max=1.0,
         epsilon=0.01,
         docking_point_distance=0.6,
-        debug=False,
+        debug=True,
         angular=True,
     ):
-        rospy.logerr(f"timeout: before: {timeout}")
         if rospy.has_param("~rotate_to_docking_point/timeout"):
             timeout = rospy.get_param("~rotate_to_docking_point/timeout", timeout)
-            rospy.logerr(f"timeout: local: {timeout}")
         else:
             timeout = rospy.get_param("~timeout", timeout)
-            rospy.logerr(f"timeout: global: {timeout}")
 
-        rospy.logerr(f"epsilon: before: {epsilon}")
         if rospy.has_param("~rotate_to_docking_point/epsilon"):
             epsilon = rospy.get_param("~rotate_to_docking_point/epsilon", epsilon)
-            rospy.logerr(f"epsilon: local: {epsilon}")
         else:
             epsilon = rospy.get_param("~epsilon", epsilon)
-            rospy.logerr(f"epsilon: global: {epsilon}")
-
         
-        rospy.logerr(f"docking_point_distance: before: {docking_point_distance}")
         docking_point_distance = rospy.get_param(
             "~docking_point_distance", docking_point_distance
         )
-        rospy.logerr(f"docking_point_distance: after: {docking_point_distance}")
-        rospy.logerr(f"debug: before: {debug}")
         debug = rospy.get_param("~debug", debug)
-        rospy.logerr(f"debug: after: {debug}")
 
-        rospy.logerr(f"{speed_min} {speed_max} {angle_min} {angle_max}")
         speed_min = rospy.get_param("~rotate_to_docking_point/speed_min", speed_min)
         speed_max = rospy.get_param("~rotate_to_docking_point/speed_max", speed_max)
         angle_min = rospy.get_param("~rotate_to_docking_point/angle_min", angle_min)
         angle_max = rospy.get_param("~rotate_to_docking_point/angle_max", angle_max)
-        rospy.logerr(f"{speed_min} {speed_max} {angle_min} {angle_max}")
 
         super().__init__(
             timeout=timeout,
             speed_min=speed_min,
-            speeD_max=speed_max,
+            speed_max=speed_max,
             route_min=angle_min,
             route_max=angle_max,
             epsilon=epsilon,
@@ -434,12 +420,10 @@ class ReachingDockingOrientation(BaseDockingState):
         if rospy.has_param("~reaching_docking_orientation/epsilon"):
             epsilon = rospy.get_param("~reaching_docking_orientation/epsilon", epsilon)
         else:
-            epsilon = rospy.get_param("~epsilon", epsilon)
-        
+            epsilon = rospy.get_param("~epsilon", epsilon)        
         
         docking_point_distance = rospy.get_param("~docking_point_distance", docking_point_distance)
         debug = rospy.get_param("~debug", debug)
-
 
         speed_min = rospy.get_param("~reaching_docking_orientation/speed_min", speed_min)
         speed_max = rospy.get_param("~reaching_docking_orientation/speed_max", speed_max)
@@ -490,7 +474,7 @@ class DockingRover(BaseDockingState):
         debug=False,
         battery_diff=0.2,
         max_bat_average=11.0,
-        batery_averaging_time=1.0,
+        battery_averaging_time=1.0,
         effort_summary_threshold=2.5,
     ):
         if rospy.has_param("~docking_rover/timeout"):
@@ -503,10 +487,8 @@ class DockingRover(BaseDockingState):
         else:
             epsilon = rospy.get_param("~epsilon", epsilon)
         
-        
         docking_point_distance = rospy.get_param("~docking_point_distance", docking_point_distance)
         debug = rospy.get_param("~debug", debug)
-
 
         speed_min = rospy.get_param("~docking_rover/speed_min", speed_min)
         speed_max = rospy.get_param("~docking_rover/speed_max", speed_max)
@@ -532,7 +514,7 @@ class DockingRover(BaseDockingState):
         self.battery_reference = None
         self.acc_data = 0.0
         self.counter = 0
-        self.collection_time = rospy.get_param("~battery_averaging_time", batery_averaging_time)
+        self.collection_time = rospy.get_param("~battery_averaging_time", battery_averaging_time)
 
         self.effort_lock: Lock = Lock()
         self.effort_threshold = rospy.get_param("~effort_threshold", effort_summary_threshold)

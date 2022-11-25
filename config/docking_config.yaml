@@ -2,7 +2,7 @@
 timeout: 3.0                  # timeout for blocking events
 debug: true                   # publish tf's with debug poses
 epsilon: 0.05                 # epsilon added to calculation of finishing condition of movement loops
-docking_point_distance: 0.6   # distance of the docking point from docking base
+docking_point_distance: 0.8   # distance of the docking point from docking base
 battery_diff: 0.2             # difference in battery voltage to consider charging the rover
 max_battery_average: 11.0     # maximum battery voltage average at the start of the docking, to consider charging as one of the stop conditions
 battery_averaging_time: 1.0   # time over which the average battery voltage will be calculated
@@ -57,7 +57,7 @@ rotate_to_docking_point/angle_max:  1.0    # the angle (in radians) left for whi
 # -------------------------------------- REACHING DOCKING POINT PARAMS ----------------------------
 reaching_docking_point/speed_min: 0.1          # minimal linear speed
 reaching_docking_point/speed_max: 0.3          # maximum linear speed
-reaching_docking_point/distance_min: 0.2      # distance left (in meters) for which the rover will move with the minimal speed
+reaching_docking_point/distance_min: 0.2       # distance left (in meters) for which the rover will move with the minimal speed
 reaching_docking_point/distance_max: 1.5       # distance left (in meters) for which the rover will move with the maximum speed
 reaching_docking_point/bias_speed_min: 0.05    # minimal angular speed for the correction movement
 reaching_docking_point/bias_speed_max: 0.3     # maximum angular speed for the correction movement
@@ -68,17 +68,17 @@ reaching_docking_point/bias_max: 0.1           # the angle (in radians) to corre
 
 
 # ------------------------------------- REACHING DOCKING ORIENTATION PARAMS -----------------------
-reaching_docking_orientation/speed_min:  0.1    # minimal angular speed
-reaching_docking_orientation/speed_max:  0.4    # maximum angular speed
-reaching_docking_orientation/angle_min:  0.17   # the angle (in radians) left for which the rover will move with the minimal speed
-reaching_docking_orientation/angle_max:  1.0    # the angle (in radians) left for which the rover will move with the maximum speed
+reaching_docking_orientation/speed_min: 0.1     # minimal angular speed
+reaching_docking_orientation/speed_max: 0.4     # maximum angular speed
+reaching_docking_orientation/angle_min: 0.17    # the angle (in radians) left for which the rover will move with the minimal speed
+reaching_docking_orientation/angle_max: 1.0     # the angle (in radians) left for which the rover will move with the maximum speed
 # reaching_docking_orientation/epsilon: 0.1     # specific epsilon for "ReachingDockingOrientation" state calculations
 # reaching_docking_orientation/timeout: 3.0     # specific timeout for "ReachingDockingOrientation" state blocking events
 
 
 #  -------------------------------------------------- DOCKING ROVER -------------------------------
-docking_rover/speed_min:  0.05       # minimal linear speed
-docking_rover/speed_max:  0.2        # maximum linear speed
+docking_rover/speed_min: 0.05        # minimal linear speed
+docking_rover/speed_max: 0.2         # maximum linear speed
 docking_rover/distance_min: 0.05     # distance left (in meters) for which the rover will move with the minimal speed
 docking_rover/distance_max: 0.8      # distance left (in meters) for which the rover will move with the maximum speed
 # docking_rover/epsilon: 0.1         # specific epsilon for "DockingRover" state calculations
