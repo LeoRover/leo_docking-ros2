@@ -84,9 +84,7 @@ class BaseDockingState(smach.State):
 
         while True:
             with self.route_lock:
-                if self.route_done >= self.route_left:
-                    break
-                if not self.angle and self.movement_direction < 0:
+                if self.route_done + self.epsilon >= self.route_left:
                     break
 
                 speed = self.movement_direction * translate(
