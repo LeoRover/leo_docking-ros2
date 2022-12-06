@@ -30,6 +30,7 @@ class BaseDockingState(smach.State):
     def __init__(
         self,
         outcomes=["succeeded", "odometry_not_working", "marker_lost"],
+        input_keys=["action_goal"],
         timeout=3.0,
         speed_min=0.1,
         speed_max=0.4,
@@ -40,7 +41,7 @@ class BaseDockingState(smach.State):
         debug=False,
         angle=True,
     ):
-        super().__init__(outcomes)
+        super().__init__(outcomes, input_keys)
         self.timeout = timeout
         self.speed_min = speed_min
         self.speed_max = speed_max
@@ -61,6 +62,8 @@ class BaseDockingState(smach.State):
         self.route_done = -1.0
         self.movement_direction = 1.0
         self.angle = angle
+
+        self.marker_id = None
 
         # debug variables
         self.debug = debug
@@ -129,41 +132,48 @@ class BaseDockingState(smach.State):
         if len(data.markers) == 0:
             return
 
-        if not self.marker_flag.is_set():
-            self.marker_flag.set()
+        for marker in data.markers:
+            if marker.marker_id == self.marker_id:
+                if not self.marker_flag.is_set():
+                    self.marker_flag.set()
 
-        marker: MarkerPose = data.markers[0]
+                marker: MarkerPose = data.markers[0]
 
-        if self.debug:
-            docking_point, docking_orientation = get_location_points_from_marker(
-                marker, distance=self.docking_point_distance
-            )
-            visualize_position(
-                docking_point,
-                docking_orientation,
-                "base_link",
-                "docking_point",
-                self.seq,
-                self.br,
-            )
+                if self.debug:
+                    (
+                        docking_point,
+                        docking_orientation,
+                    ) = get_location_points_from_marker(
+                        marker, distance=self.docking_point_distance
+                    )
+                    visualize_position(
+                        docking_point,
+                        docking_orientation,
+                        "base_link",
+                        "docking_point",
+                        self.seq,
+                        self.br,
+                    )
 
-            m = normalize_marker(marker)
-            visualize_position(
-                m.p,
-                m.M.GetQuaternion(),
-                "base_link",
-                "normalized_marker",
-                self.seq,
-                self.br,
-            )
+                    m = normalize_marker(marker)
+                    visualize_position(
+                        m.p,
+                        m.M.GetQuaternion(),
+                        "base_link",
+                        "normalized_marker",
+                        self.seq,
+                        self.br,
+                    )
 
-            self.seq += 1
+                    self.seq += 1
 
-        with self.route_lock:
-            self.calculate_route_left(marker)
+                with self.route_lock:
+                    self.calculate_route_left(marker)
 
-        with self.odom_lock:
-            self.odom_reference = self.current_odom
+                with self.odom_lock:
+                    self.odom_reference = self.current_odom
+
+                break
 
     def wheel_odom_callback(self, data: Odometry) -> None:
         """Function called every time, there is new Odometry message published on the topic.
@@ -184,6 +194,7 @@ class BaseDockingState(smach.State):
         self.marker_flag.clear()
         self.current_odom = None
         self.odom_reference = None
+        self.marker_id = user_data.action_goal.marker_id
 
         self.vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
 
@@ -243,7 +254,7 @@ class RotateToDockingPoint(BaseDockingState):
             epsilon = rospy.get_param("~rotate_to_docking_point/epsilon", epsilon)
         else:
             epsilon = rospy.get_param("~epsilon", epsilon)
-        
+
         docking_point_distance = rospy.get_param(
             "~docking_point_distance", docking_point_distance
         )
@@ -418,15 +429,25 @@ class ReachingDockingOrientation(BaseDockingState):
         if rospy.has_param("~reaching_docking_orientation/epsilon"):
             epsilon = rospy.get_param("~reaching_docking_orientation/epsilon", epsilon)
         else:
-            epsilon = rospy.get_param("~epsilon", epsilon)        
-        
-        docking_point_distance = rospy.get_param("~docking_point_distance", docking_point_distance)
+            epsilon = rospy.get_param("~epsilon", epsilon)
+
+        docking_point_distance = rospy.get_param(
+            "~docking_point_distance", docking_point_distance
+        )
         debug = rospy.get_param("~debug", debug)
 
-        speed_min = rospy.get_param("~reaching_docking_orientation/speed_min", speed_min)
-        speed_max = rospy.get_param("~reaching_docking_orientation/speed_max", speed_max)
-        angle_min = rospy.get_param("~reaching_docking_orientation/angle_min", angle_min)
-        angle_max = rospy.get_param("~reaching_docking_orientation/angle_max", angle_max)
+        speed_min = rospy.get_param(
+            "~reaching_docking_orientation/speed_min", speed_min
+        )
+        speed_max = rospy.get_param(
+            "~reaching_docking_orientation/speed_max", speed_max
+        )
+        angle_min = rospy.get_param(
+            "~reaching_docking_orientation/angle_min", angle_min
+        )
+        angle_max = rospy.get_param(
+            "~reaching_docking_orientation/angle_max", angle_max
+        )
 
         super().__init__(
             timeout=timeout,
@@ -462,6 +483,7 @@ class DockingRover(BaseDockingState):
     def __init__(
         self,
         outcomes=["succeeded", "odometry_not_working", "marker_lost"],
+        input_keys=["action_goal"],
         timeout=3,
         speed_min=0.05,
         speed_max=0.2,
@@ -484,17 +506,20 @@ class DockingRover(BaseDockingState):
             epsilon = rospy.get_param("~docking_rover/epsilon", epsilon)
         else:
             epsilon = rospy.get_param("~epsilon", epsilon)
-        
-        docking_point_distance = rospy.get_param("~docking_point_distance", docking_point_distance)
+
+        docking_point_distance = rospy.get_param(
+            "~docking_point_distance", docking_point_distance
+        )
         debug = rospy.get_param("~debug", debug)
 
         speed_min = rospy.get_param("~docking_rover/speed_min", speed_min)
         speed_max = rospy.get_param("~docking_rover/speed_max", speed_max)
         route_min = rospy.get_param("~docking_rover/distance_min", route_min)
         route_max = rospy.get_param("~docking_rover/distance_max", route_max)
-        
+
         super().__init__(
             outcomes,
+            input_keys,
             timeout,
             speed_min,
             speed_max,
@@ -507,15 +532,21 @@ class DockingRover(BaseDockingState):
 
         self.battery_lock: Lock = Lock()
         self.battery_diff = rospy.get_param("~battery_diff", battery_diff)
-        self.battery_threshold = rospy.get_param("~max_battery_average", max_bat_average)
+        self.battery_threshold = rospy.get_param(
+            "~max_battery_average", max_bat_average
+        )
         self.charging = False
         self.battery_reference = None
         self.acc_data = 0.0
         self.counter = 0
-        self.collection_time = rospy.get_param("~battery_averaging_time", battery_averaging_time)
+        self.collection_time = rospy.get_param(
+            "~battery_averaging_time", battery_averaging_time
+        )
 
         self.effort_lock: Lock = Lock()
-        self.effort_threshold = rospy.get_param("~effort_threshold", effort_summary_threshold)
+        self.effort_threshold = rospy.get_param(
+            "~effort_threshold", effort_summary_threshold
+        )
         self.effort_stop = False
 
     def battery_callback(self, data: Float32) -> None:
@@ -564,9 +595,10 @@ class DockingRover(BaseDockingState):
         r = rospy.Rate(5)
 
         # waiting for the end of colleting data
+        rospy.loginfo("Measuring battery data...")
         while rospy.Time.now() < self.end_time:
-            rospy.loginfo("Measuring battery data.")
             r.sleep()
+        rospy.loginfo("Batery voltage average level calculated. Performing docking.")
 
         msg = Twist()
         r = rospy.Rate(10)
@@ -581,14 +613,14 @@ class DockingRover(BaseDockingState):
 
             with self.effort_lock:
                 if self.effort_stop:
-                    rospy.logwarn(
+                    rospy.loginfo(
                         f"Docking stopped. Condition: wheel motors effort rise detected."
                     )
                     break
 
             with self.route_lock:
                 if self.route_done + self.epsilon >= self.route_left:
-                    rospy.logwarn(
+                    rospy.loginfo(
                         f"Docking stopped. Condition: distance to marker reached."
                     )
                     break

@@ -3,6 +3,8 @@
 import rospy
 import smach
 import smach_ros
+from smach_ros import ActionServerWrapper
+from leo_docking.msg import PerformDockingAction
 
 from leo_docking.states import (
     StartState,
@@ -16,12 +18,12 @@ from leo_docking.states import (
     DockingRover,
 )
 
-
 if __name__ == "__main__":
     rospy.init_node("leo_docking", log_level=rospy.INFO)
 
     sm = smach.StateMachine(
-        outcomes=["ROVER DOCKED", "DOCKING FAILED"],
+        outcomes=["ROVER DOCKED", "DOCKING FAILED", "aborted", "preemepted"],
+        input_keys=["action_goal"],
     )
 
     with sm:
@@ -42,7 +44,7 @@ if __name__ == "__main__":
                 "docking_area": "Reaching Docking Position",
                 "outside_docking_area": "Reaching Docking Area",
             },
-            remapping={"target_pose": "docking_area_data"},
+            remapping={"target_pose": "docking_area_data", "marker_id": "action_goal"},
         )
 
         reaching_docking_area = smach.Sequence(
@@ -86,6 +88,7 @@ if __name__ == "__main__":
         reaching_docking_position = smach.Sequence(
             outcomes=["succeeded", "odometry_not_working", "marker_lost"],
             connector_outcome="succeeded",
+            input_keys=["action_goal"],
         )
 
         with reaching_docking_position:
@@ -124,9 +127,20 @@ if __name__ == "__main__":
             },
         )
 
+    asw = ActionServerWrapper(
+        "leo_docking_action_server",
+        PerformDockingAction,
+        wrapped_container=sm,
+        succeeded_outcomes=["ROVER DOCKED", "DOCKING FAILED"],
+        aborted_outcomes=["aborted"],
+        preempted_outcomes=["preempted"],
+        goal_key="action_goal",
+    )
+
+    # Run the server in a background thread
     sis = smach_ros.IntrospectionServer("leo_docking", sm, "/LEO_DOCKING")
     sis.start()
-
-    outcome = sm.execute()
+    asw.run_server()
+    # outcome = sm.execute()
 
     sis.stop()

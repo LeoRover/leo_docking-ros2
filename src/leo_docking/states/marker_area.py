@@ -26,12 +26,13 @@ class CheckArea(smach.State):
     def __init__(
         self,
         outcomes=["docking_area", "outside_docking_area", "marker_lost"],
+        input_keys=["action_goal"],
         output_keys=["target_pose"],
         threshold_angle=0.26,  # 15 degrees
         docking_distance=2.0,
         timeout=3.0,
     ):
-        super().__init__(outcomes=outcomes, output_keys=output_keys)
+        super().__init__(outcomes=outcomes, input_keys=input_keys, output_keys=output_keys)
 
         self.threshold_angle = rospy.get_param("~threshold_angle", threshold_angle)
         self.docking_distance = rospy.get_param("~docking_distance", docking_distance)
@@ -42,15 +43,19 @@ class CheckArea(smach.State):
             self.timeout = rospy.get_param("~timeout", timeout)
 
         self.marker_flag = Event()
+        self.marker_id = None
 
     def marker_callback(self, data: MarkerDetection):
         """Function called everu time, there is new MarkerDetection message published on the topic.
         Saves the detected marker's position for further calculations.
         """
         if len(data.markers) != 0:
-            self.marker: MarkerPose = data.markers[0]
-            if not self.marker_flag.is_set():
-                self.marker_flag.set()
+            for marker in data.markers:
+                if marker.marker_id == self.marker_id:
+                    self.marker: MarkerPose = data.markers[0]
+                    if not self.marker_flag.is_set():
+                        self.marker_flag.set()
+                    break
 
     def check_threshold(self, dist_x: float, dist_y: float) -> bool:
         """Function checking if the rover is in the docking area threshold.
@@ -70,6 +75,7 @@ class CheckArea(smach.State):
         Checks rover position and eventually calculates target pose of the rover.
         """
         self.marker_flag.clear()
+        self.marker_id = user_data.action_goal.marker_id
         marker_sub = rospy.Subscriber(
             "marker_detections", MarkerDetection, self.marker_callback, queue_size=1
         )
