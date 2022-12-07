@@ -25,14 +25,17 @@ class CheckArea(smach.State):
 
     def __init__(
         self,
-        outcomes=["docking_area", "outside_docking_area", "marker_lost"],
+        outcomes=["docking_area", "outside_docking_area", "marker_lost", "preempted"],
         input_keys=["action_goal"],
         output_keys=["target_pose"],
         threshold_angle=0.26,  # 15 degrees
         docking_distance=2.0,
         timeout=3.0,
+        name="Check Area",
     ):
-        super().__init__(outcomes=outcomes, input_keys=input_keys, output_keys=output_keys)
+        super().__init__(
+            outcomes=outcomes, input_keys=input_keys, output_keys=output_keys
+        )
 
         self.threshold_angle = rospy.get_param("~threshold_angle", threshold_angle)
         self.docking_distance = rospy.get_param("~docking_distance", docking_distance)
@@ -44,6 +47,8 @@ class CheckArea(smach.State):
 
         self.marker_flag = Event()
         self.marker_id = None
+
+        self.state_log_name = name
 
     def marker_callback(self, data: MarkerDetection):
         """Function called everu time, there is new MarkerDetection message published on the topic.
@@ -70,13 +75,18 @@ class CheckArea(smach.State):
 
         return dist_y <= max_value
 
+    def service_preempt(self):
+        rospy.logwarn(f"Preemption request handling for '{self.state_log_name}' state.")
+        self.marker_sub.unregister()
+        return super().service_preempt()
+
     def execute(self, user_data):
         """Main state method invoked on state entered.
         Checks rover position and eventually calculates target pose of the rover.
         """
         self.marker_flag.clear()
         self.marker_id = user_data.action_goal.marker_id
-        marker_sub = rospy.Subscriber(
+        self.marker_sub = rospy.Subscriber(
             "marker_detections", MarkerDetection, self.marker_callback, queue_size=1
         )
         self.marker = None
@@ -90,7 +100,7 @@ class CheckArea(smach.State):
         x_dist, y_dist = calculate_threshold_distances(self.marker)
 
         if self.check_threshold(x_dist, y_dist):
-            marker_sub.unregister()
+            self.marker_sub.unregister()
             return "docking_area"
 
         # getting target pose
@@ -103,7 +113,11 @@ class CheckArea(smach.State):
             point,
         )
 
-        marker_sub.unregister()
+        if self.preempt_requested():
+            self.service_preempt()
+            return "preempted"
+
+        self.marker_sub.unregister()
 
         # passing calculated data to next states
         user_data.target_pose = target_pose
@@ -117,7 +131,7 @@ class BaseDockAreaState(smach.State):
 
     def __init__(
         self,
-        outcomes=["succeeded", "odometry_not_working"],
+        outcomes=["succeeded", "odometry_not_working", "preempted"],
         input_keys=["target_pose"],
         output_keys=["target_pose"],
         timeout=3.0,
@@ -127,6 +141,7 @@ class BaseDockAreaState(smach.State):
         route_max=1.05,
         epsilon=0.1,
         angle=True,
+        name="",
     ):
         super().__init__(outcomes, input_keys, output_keys)
 
@@ -143,6 +158,8 @@ class BaseDockAreaState(smach.State):
         self.odom_reference: Odometry = None
         self.odom_flag: Event = Event()
         self.route_lock: Lock = Lock()
+
+        self.state_log_name = name
 
     def calculate_route_done(
         self, odom_reference: Odometry, current_odom: Odometry, angle: bool = True
@@ -203,10 +220,16 @@ class BaseDockAreaState(smach.State):
                 else:
                     msg.linear.x = speed
 
+                if self.preempt_requested():
+                    self.service_preempt()
+                    return "preempted"
+
                 self.cmd_vel_pub.publish(msg)
             r.sleep()
 
         self.cmd_vel_pub.publish(Twist())
+
+        return None
 
     def execute(self, user_data):
         """Main state method, executed automatically on state entered"""
@@ -230,7 +253,9 @@ class BaseDockAreaState(smach.State):
         # calculating route left
         route_left = self.calculate_route_left(target_pose)
         # moving the rover
-        self.movement_loop(route_left, self.angle)
+        outcome = self.movement_loop(route_left, self.angle)
+        if outcome:
+            return "preempted"
 
         self.cmd_vel_pub.unregister()
         self.wheel_odom_sub.unregister()
@@ -253,6 +278,13 @@ class BaseDockAreaState(smach.State):
         with self.route_lock:
             self.calculate_route_done(self.odom_reference, data, self.angle)
 
+    def service_preempt(self):
+        rospy.logwarn(f"Preemption request handling for {self.state_log_name} state")
+        self.cmd_vel_pub.publish(Twist())
+        self.cmd_vel_pub.unregister()
+        self.wheel_odom_sub.unregister()
+        return super().service_preempt()
+
 
 class RotateToDockArea(BaseDockAreaState):
     """The first state of the sequence state machine getting rover to docking area;
@@ -267,6 +299,7 @@ class RotateToDockArea(BaseDockAreaState):
         angle_max=1.05,
         epsilon=0.1,
         angle=True,
+        name="Rotate Towards Area",
     ):
         if rospy.has_param("~rotate_to_dock_area/timeout"):
             timeout = rospy.get_param("~rotate_to_dock_area/timeout", timeout)
@@ -291,6 +324,7 @@ class RotateToDockArea(BaseDockAreaState):
             route_max=angle_max,
             epsilon=epsilon,
             angle=angle,
+            name=name,
         )
 
     def calculate_route_left(self, target_pose: PyKDL.Frame) -> float:
@@ -313,6 +347,7 @@ class RideToDockArea(BaseDockAreaState):
         distance_max=0.5,
         epsilon=0.1,
         angle=False,
+        name="Ride To Area",
     ):
 
         if rospy.has_param("~ride_to_dock_area/timeout"):
@@ -338,6 +373,7 @@ class RideToDockArea(BaseDockAreaState):
             route_max=distance_max,
             epsilon=epsilon,
             angle=angle,
+            name=name,
         )
 
     def calculate_route_left(self, target_pose: PyKDL.Frame) -> float:
@@ -361,6 +397,7 @@ class RotateToMarker(BaseDockAreaState):
         angle_max=1.05,
         epsilon=0.1,
         angle=True,
+        name="Rotate Towards Marker",
     ):
         if rospy.has_param("~rotate_to_marker/timeout"):
             timeout = rospy.get_param("~rotate_to_marker/timeout", timeout)
@@ -376,7 +413,7 @@ class RotateToMarker(BaseDockAreaState):
         speed_max = rospy.get_param("~rotate_to_marker/speed_max", speed_max)
         angle_min = rospy.get_param("~rotate_to_marker/angle_min", angle_min)
         angle_max = rospy.get_param("~rotate_to_marker/angle_max", angle_max)
-        
+
         super().__init__(
             output_keys=output_keys,
             timeout=timeout,
@@ -386,6 +423,7 @@ class RotateToMarker(BaseDockAreaState):
             route_max=angle_max,
             epsilon=epsilon,
             angle=angle,
+            name=name,
         )
 
     def calculate_route_left(self, target_pose: PyKDL.Frame) -> float:

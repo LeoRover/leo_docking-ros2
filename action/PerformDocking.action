@@ -1,0 +1,8 @@
+# goal
+uint16 marker_id
+---
+# result
+bool docked
+---
+# feedback
+string current_state

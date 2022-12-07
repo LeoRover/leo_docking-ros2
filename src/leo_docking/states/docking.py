@@ -29,7 +29,7 @@ class BaseDockingState(smach.State):
 
     def __init__(
         self,
-        outcomes=["succeeded", "odometry_not_working", "marker_lost"],
+        outcomes=["succeeded", "odometry_not_working", "marker_lost", "preempted"],
         input_keys=["action_goal"],
         timeout=3.0,
         speed_min=0.1,
@@ -40,6 +40,7 @@ class BaseDockingState(smach.State):
         docking_point_distance=0.6,
         debug=False,
         angle=True,
+        name="",
     ):
         super().__init__(outcomes, input_keys)
         self.timeout = timeout
@@ -64,6 +65,8 @@ class BaseDockingState(smach.State):
         self.angle = angle
 
         self.marker_id = None
+
+        self.state_log_name = name
 
         # debug variables
         self.debug = debug
@@ -103,10 +106,15 @@ class BaseDockingState(smach.State):
                 else:
                     msg.linear.x = speed
 
+                if self.preempt_requested():
+                    self.service_preempt()
+                    return "preempted"
+
                 self.vel_pub.publish(msg)
             r.sleep()
 
         self.vel_pub.publish(Twist())
+        return None
 
     def calculate_route_done(
         self, odom_reference: Odometry, current_odom: Odometry
@@ -220,13 +228,23 @@ class BaseDockingState(smach.State):
             rospy.logerr("Didn't get wheel odometry message. Docking failed.")
             return "odometry_not_working"
 
-        self.movement_loop()
+        outcome = self.movement_loop()
+        if outcome:
+            return "preempted"
 
         self.wheel_odom_sub.unregister()
         self.marker_sub.unregister()
         self.vel_pub.unregister()
 
         return "succeeded"
+
+    def service_preempt(self):
+        rospy.logwarn(f"Preemption request handling for {self.state_log_name} state")
+        self.vel_pub.publish(Twist())
+        self.vel_pub.unregister()
+        self.wheel_odom_sub.unregister()
+        self.marker_sub.unregister()
+        return super().service_preempt()
 
 
 class RotateToDockingPoint(BaseDockingState):
@@ -244,6 +262,7 @@ class RotateToDockingPoint(BaseDockingState):
         docking_point_distance=0.6,
         debug=True,
         angular=True,
+        name="Rotate To Docking Point",
     ):
         if rospy.has_param("~rotate_to_docking_point/timeout"):
             timeout = rospy.get_param("~rotate_to_docking_point/timeout", timeout)
@@ -275,6 +294,7 @@ class RotateToDockingPoint(BaseDockingState):
             docking_point_distance=docking_point_distance,
             debug=debug,
             angle=angular,
+            name=name,
         )
 
     def calculate_route_left(self, marker: MarkerPose):
@@ -307,6 +327,7 @@ class ReachingDockingPoint(BaseDockingState):
         docking_point_distance=0.6,
         debug=True,
         angular=False,
+        name="Reaching Docking Point",
     ):
         if rospy.has_param("~reaching_docking_point/timeout"):
             timeout = rospy.get_param("~reaching_docking_point/timeout", timeout)
@@ -338,6 +359,7 @@ class ReachingDockingPoint(BaseDockingState):
             docking_point_distance=docking_point_distance,
             debug=debug,
             angle=angular,
+            name=name,
         )
 
         self.bias_min = rospy.get_param("~reaching_docking_point/bias_min", bias_min)
@@ -381,6 +403,10 @@ class ReachingDockingPoint(BaseDockingState):
 
                 msg.angular.z = angular_speed
 
+                if self.preempt_requested():
+                    self.service_preempt()
+                    return "preempted"
+
                 self.vel_pub.publish(msg)
             r.sleep()
 
@@ -420,6 +446,7 @@ class ReachingDockingOrientation(BaseDockingState):
         docking_point_distance=0.6,
         debug=True,
         angular=True,
+        name="Reaching Dockin Orientation",
     ):
         if rospy.has_param("~reaching_docking_orientation/timeout"):
             timeout = rospy.get_param("~reaching_docking_orientation/timeout", timeout)
@@ -459,6 +486,7 @@ class ReachingDockingOrientation(BaseDockingState):
             docking_point_distance=docking_point_distance,
             debug=debug,
             angle=angular,
+            name=name,
         )
 
     def calculate_route_left(self, marker: MarkerPose):
@@ -482,7 +510,6 @@ class DockingRover(BaseDockingState):
 
     def __init__(
         self,
-        outcomes=["succeeded", "odometry_not_working", "marker_lost"],
         input_keys=["action_goal"],
         timeout=3,
         speed_min=0.05,
@@ -496,6 +523,7 @@ class DockingRover(BaseDockingState):
         max_bat_average=11.0,
         battery_averaging_time=1.0,
         effort_summary_threshold=2.5,
+        name="Docking Rover",
     ):
         if rospy.has_param("~docking_rover/timeout"):
             timeout = rospy.get_param("~docking_rover/timeout", timeout)
@@ -518,16 +546,16 @@ class DockingRover(BaseDockingState):
         route_max = rospy.get_param("~docking_rover/distance_max", route_max)
 
         super().__init__(
-            outcomes,
-            input_keys,
-            timeout,
-            speed_min,
-            speed_max,
-            route_min,
-            route_max,
-            epsilon,
-            docking_point_distance,
-            debug,
+            input_keys=input_keys,
+            timeout=timeout,
+            speed_min=speed_min,
+            speed_max=speed_max,
+            route_min=route_min,
+            route_max=route_max,
+            epsilon=epsilon,
+            docking_point_distance=docking_point_distance,
+            debug=debug,
+            name=name,
         )
 
         self.battery_lock: Lock = Lock()
@@ -632,6 +660,11 @@ class DockingRover(BaseDockingState):
                     self.speed_min,
                     self.speed_max,
                 )
+
+                if self.preempt_requested():
+                    self.service_preempt()
+                    return "preempted"
+
                 self.vel_pub.publish(msg)
             r.sleep()
 
@@ -644,3 +677,10 @@ class DockingRover(BaseDockingState):
         self.route_left = math.sqrt(
             normalized_marker.p.x() ** 2 + normalized_marker.p.y() ** 2
         )
+
+    def service_preempt(self):
+        self.wheel_odom_sub.unregister()
+        self.marker_sub.unregister()
+        self.battery_sub.unregister()
+        self.joint_state_sub.unregister()
+        return super().service_preempt()

@@ -22,7 +22,7 @@ if __name__ == "__main__":
     rospy.init_node("leo_docking", log_level=rospy.INFO)
 
     sm = smach.StateMachine(
-        outcomes=["ROVER DOCKED", "DOCKING FAILED", "aborted", "preemepted"],
+        outcomes=["ROVER DOCKED", "DOCKING FAILED", "aborted", "preempted"],
         input_keys=["action_goal"],
     )
 
@@ -32,23 +32,25 @@ if __name__ == "__main__":
             StartState(timeout=5.0),
             transitions={
                 "marker_not_found": "DOCKING FAILED",
-                "marker_found": "CheckArea",
+                "marker_found": "Check Area",
+                "preempted": "preempted",
             },
         )
 
         smach.StateMachine.add(
-            "CheckArea",
+            "Check Area",
             CheckArea(timeout=5, threshold_angle=0.17),
             transitions={
                 "marker_lost": "DOCKING FAILED",
                 "docking_area": "Reaching Docking Position",
                 "outside_docking_area": "Reaching Docking Area",
+                "preempted": "preempted",
             },
             remapping={"target_pose": "docking_area_data", "marker_id": "action_goal"},
         )
 
         reaching_docking_area = smach.Sequence(
-            outcomes=["succeeded", "odometry_not_working"],
+            outcomes=["succeeded", "odometry_not_working", "preempted"],
             connector_outcome="succeeded",
             input_keys=["docking_area_data"],
         )
@@ -80,13 +82,14 @@ if __name__ == "__main__":
             "Reaching Docking Area",
             reaching_docking_area,
             transitions={
-                "succeeded": "CheckArea",
+                "succeeded": "Check Area",
                 "odometry_not_working": "DOCKING FAILED",
+                "preempted": "preempted",
             },
         )
 
         reaching_docking_position = smach.Sequence(
-            outcomes=["succeeded", "odometry_not_working", "marker_lost"],
+            outcomes=["succeeded", "odometry_not_working", "marker_lost", "preempted"],
             connector_outcome="succeeded",
             input_keys=["action_goal"],
         )
@@ -114,6 +117,7 @@ if __name__ == "__main__":
                 "succeeded": "Docking Rover",
                 "odometry_not_working": "DOCKING FAILED",
                 "marker_lost": "DOCKING FAILED",
+                "preempted": "preempted",
             },
         )
 
@@ -124,6 +128,7 @@ if __name__ == "__main__":
                 "succeeded": "ROVER DOCKED",
                 "odometry_not_working": "DOCKING FAILED",
                 "marker_lost": "DOCKING FAILED",
+                "preempted": "preempted",
             },
         )
 
