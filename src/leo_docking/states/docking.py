@@ -1,6 +1,8 @@
 from __future__ import annotations
 from threading import Lock, Event
+from queue import Queue
 import math
+import numpy as np
 
 import rospy
 import tf2_ros
@@ -523,6 +525,7 @@ class DockingRover(BaseDockingState):
         max_bat_average=11.0,
         battery_averaging_time=1.0,
         effort_summary_threshold=2.5,
+        effort_buffer_size=10,
         name="Docking Rover",
     ):
         if rospy.has_param("~docking_rover/timeout"):
@@ -576,6 +579,7 @@ class DockingRover(BaseDockingState):
             "~effort_threshold", effort_summary_threshold
         )
         self.effort_stop = False
+        self.effort_buf = Queue(maxsize=effort_buffer_size)
 
     def battery_callback(self, data: Float32) -> None:
         """Function called every time, there is new message published on the battery topic.
@@ -604,8 +608,16 @@ class DockingRover(BaseDockingState):
             for effort in data.effort:
                 effort_sum += effort
 
-            if effort_sum >= self.effort_threshold:
-                self.effort_stop = True
+            if self.effort_buf.full():
+                buffer_to_np = np.array(list(self.effort_buf.queue))
+                avr = np.mean(buffer_to_np)
+                
+                if avr >= self.effort_threshold:
+                    self.effort_stop = True
+                
+                self.effort_buf.get_nowait()
+            
+            self.effort_buf.put_nowait(effort_sum)
 
     def movement_loop(self):
         """Function performing rover movement; invoked in the "execute" method of the state."""
