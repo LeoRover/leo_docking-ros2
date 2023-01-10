@@ -579,7 +579,8 @@ class DockingRover(BaseDockingState):
             "~effort_threshold", effort_summary_threshold
         )
         self.effort_stop = False
-        self.effort_buf = Queue(maxsize=effort_buffer_size)
+        buff_size = rospy.get_param("~effort_buffer_size", effort_buffer_size)
+        self.effort_buf = Queue(maxsize=buff_size)
 
     def battery_callback(self, data: Float32) -> None:
         """Function called every time, there is new message published on the battery topic.
@@ -611,12 +612,12 @@ class DockingRover(BaseDockingState):
             if self.effort_buf.full():
                 buffer_to_np = np.array(list(self.effort_buf.queue))
                 avr = np.mean(buffer_to_np)
-                
+
                 if avr >= self.effort_threshold:
                     self.effort_stop = True
-                
+
                 self.effort_buf.get_nowait()
-            
+
             self.effort_buf.put_nowait(effort_sum)
 
     def movement_loop(self):

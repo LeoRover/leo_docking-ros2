@@ -7,6 +7,7 @@ battery_diff: 0.2             # difference in battery voltage to consider chargi
 max_battery_average: 11.0     # maximum battery voltage average at the start of the docking, to consider charging as one of the stop conditions
 battery_averaging_time: 1.0   # time over which the average battery voltage will be calculated
 effort_threshold: 2.5         # summarized effort threshold to consider the rover moving in place - getting blocked on the base
+effort_buffer_size: 10        # size of wheel motor efforts buffer - average of the sums is considered in comparison with effort threshold
 
 # -------------------------------------------- START STATE PARAMS ---------------------------------
 # start_state/timeout: 3.0  # specific timeout for "StartState" state blocking events

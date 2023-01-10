@@ -1,0 +1,33 @@
+#!usr/bin/env python3
+
+import sys
+import rospy
+import actionlib
+from actionlib_msgs.msg import GoalStatus
+from leo_docking.msg import PerformDockingAction, PerformDockingGoal
+
+
+def feedback_callback(feedback):
+    rospy.loginfo(feedback.current_state)
+
+if __name__ == "__main__":
+    rospy.init_node("docking_client")
+    myargv = rospy.myargv(argv=sys.argv)
+    
+    marker_id = int(myargv[1])
+
+    client = actionlib.SimpleActionClient("leo_docking_action_server", PerformDockingAction)
+    client.wait_for_server()
+    rospy.loginfo(f"Docking server active.")
+    goal = PerformDockingGoal(marker_id=marker_id)
+    r = rospy.Duration(0.1)
+    client.send_goal(goal, feedback_cb=feedback_callback)
+    status = None
+
+    try:
+        while status != GoalStatus.SUCCEEDED:
+            rospy.loginfo(f"Sending goal: marker_id={marker_id}")
+            rospy.sleep(r)
+    except KeyboardInterrupt as e:
+        rospy.logwarn(f"Cought Ctrl+C. Canceling docking.")
+        client.cancel_goal(goal)

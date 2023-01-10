@@ -146,6 +146,4 @@ if __name__ == "__main__":
     sis = smach_ros.IntrospectionServer("leo_docking", sm, "/LEO_DOCKING")
     sis.start()
     asw.run_server()
-    # outcome = sm.execute()
-
     sis.stop()

@@ -20,5 +20,6 @@ catkin_package()
 catkin_install_python(
   PROGRAMS
   scripts/docking_main
+  scripts/docking_client
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

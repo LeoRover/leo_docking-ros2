@@ -59,5 +59,7 @@ class StartState(smach.State):
             return "preempted"
 
         self.marker_sub.unregister()
+        while True:
+            rospy.sleep(rospy.Duration(secs=1))
 
         return "marker_found"
