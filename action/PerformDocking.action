@@ -2,7 +2,7 @@
 uint16 marker_id
 ---
 # result
-bool docked
+string result
 ---
 # feedback
 string current_state

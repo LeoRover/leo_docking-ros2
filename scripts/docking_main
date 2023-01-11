@@ -18,12 +18,13 @@ from leo_docking.states import (
     DockingRover,
 )
 
+
 if __name__ == "__main__":
     rospy.init_node("leo_docking", log_level=rospy.INFO)
 
     sm = smach.StateMachine(
-        outcomes=["ROVER DOCKED", "DOCKING FAILED", "aborted", "preempted"],
-        input_keys=["action_goal"],
+        outcomes=["ROVER DOCKED", "DOCKING FAILED", "DOCKING PREEMPTED"],
+        input_keys=["action_goal", "action_feedback", "action_result"],
     )
 
     with sm:
@@ -33,7 +34,12 @@ if __name__ == "__main__":
             transitions={
                 "marker_not_found": "DOCKING FAILED",
                 "marker_found": "Check Area",
-                "preempted": "preempted",
+                "preempted": "DOCKING PREEMPTED",
+            },
+            remapping={
+                "action_goal": "action_goal",
+                "action_feedback": "action_feedback",
+                "action_result": "action_result",
             },
         )
 
@@ -42,17 +48,22 @@ if __name__ == "__main__":
             CheckArea(timeout=5, threshold_angle=0.17),
             transitions={
                 "marker_lost": "DOCKING FAILED",
-                "docking_area": "Reaching Docking Position",
+                "docking_area": "Reaching Docking Point",
                 "outside_docking_area": "Reaching Docking Area",
-                "preempted": "preempted",
+                "preempted": "DOCKING PREEMPTED",
             },
-            remapping={"target_pose": "docking_area_data", "marker_id": "action_goal"},
+            remapping={
+                "target_pose": "docking_area_data",
+                "marker_id": "action_goal",
+                "action_feedback": "action_feedback",
+                "action_result": "action_result",
+            },
         )
 
         reaching_docking_area = smach.Sequence(
             outcomes=["succeeded", "odometry_not_working", "preempted"],
             connector_outcome="succeeded",
-            input_keys=["docking_area_data"],
+            input_keys=["docking_area_data", "action_feedback", "action_result"],
         )
 
         with reaching_docking_area:
@@ -61,6 +72,8 @@ if __name__ == "__main__":
                 RotateToDockArea(timeout=2.0),
                 remapping={
                     "target_pose": "docking_area_data",
+                    "action_feedback": "action_feedback",
+                    "action_result": "action_result",
                 },
             )
             smach.Sequence.add(
@@ -68,6 +81,8 @@ if __name__ == "__main__":
                 RideToDockArea(timeout=2.0),
                 remapping={
                     "target_pose": "docking_area_data",
+                    "action_feedback": "action_feedback",
+                    "action_result": "action_result",
                 },
             )
             smach.Sequence.add(
@@ -75,6 +90,8 @@ if __name__ == "__main__":
                 RotateToMarker(timeout=2.0),
                 remapping={
                     "target_pose": "docking_area_data",
+                    "action_feedback": "action_feedback",
+                    "action_result": "action_result",
                 },
             )
 
@@ -84,17 +101,22 @@ if __name__ == "__main__":
             transitions={
                 "succeeded": "Check Area",
                 "odometry_not_working": "DOCKING FAILED",
-                "preempted": "preempted",
+                "preempted": "DOCKING PREEMPTED",
+            },
+            remapping={
+                "docking_area_data": "docking_area_data",
+                "action_feedback": "action_feedback",
+                "action_result": "action_result",
             },
         )
 
-        reaching_docking_position = smach.Sequence(
+        reaching_docking_point = smach.Sequence(
             outcomes=["succeeded", "odometry_not_working", "marker_lost", "preempted"],
             connector_outcome="succeeded",
-            input_keys=["action_goal"],
+            input_keys=["action_goal", "action_feedback", "action_result"],
         )
 
-        with reaching_docking_position:
+        with reaching_docking_point:
             smach.Sequence.add(
                 "Rotate To Docking Point",
                 RotateToDockingPoint(timeout=2.0, docking_point_distance=0.8),
@@ -111,24 +133,34 @@ if __name__ == "__main__":
             )
 
         smach.StateMachine.add(
-            "Reaching Docking Position",
-            reaching_docking_position,
+            "Reaching Docking Point",
+            reaching_docking_point,
             transitions={
                 "succeeded": "Docking Rover",
                 "odometry_not_working": "DOCKING FAILED",
                 "marker_lost": "DOCKING FAILED",
-                "preempted": "preempted",
+                "preempted": "DOCKING PREEMPTED",
+            },
+            remapping={
+                "action_goal": "action_goal",
+                "action_feedback": "action_feedback",
+                "action_result": "action_result",
             },
         )
 
         smach.StateMachine.add(
             "Docking Rover",
-            DockingRover(),
+            DockingRover(epsilon=0.05),
             transitions={
                 "succeeded": "ROVER DOCKED",
                 "odometry_not_working": "DOCKING FAILED",
                 "marker_lost": "DOCKING FAILED",
-                "preempted": "preempted",
+                "preempted": "DOCKING PREEMPTED",
+            },
+            remapping={
+                "action_goal": "action_goal",
+                "action_feedback": "action_feedback",
+                "action_result": "action_result",
             },
         )
 
@@ -136,10 +168,12 @@ if __name__ == "__main__":
         "leo_docking_action_server",
         PerformDockingAction,
         wrapped_container=sm,
-        succeeded_outcomes=["ROVER DOCKED", "DOCKING FAILED"],
-        aborted_outcomes=["aborted"],
-        preempted_outcomes=["preempted"],
+        succeeded_outcomes=["ROVER DOCKED"],
+        aborted_outcomes=["DOCKING FAILED"],
+        preempted_outcomes=["DOCKING PREEMPTED"],
         goal_key="action_goal",
+        feedback_key="action_feedback",
+        result_key="action_result",
     )
 
     # Run the server in a background thread

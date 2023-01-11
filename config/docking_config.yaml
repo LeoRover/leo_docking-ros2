@@ -83,4 +83,8 @@ docking_rover/speed_max: 0.2         # maximum linear speed
 docking_rover/distance_min: 0.05     # distance left (in meters) for which the rover will move with the minimal speed
 docking_rover/distance_max: 0.8      # distance left (in meters) for which the rover will move with the maximum speed
 docking_rover/epsilon: 0.25          # specific epsilon for "DockingRover" state calculations
+docking_rover/bias_speed_min: 0.05    # minimal angular speed for the correction movement
+docking_rover/bias_speed_max: 0.3     # maximum angular speed for the correction movement
+docking_rover/bias_min: 0.01          # the angle (in radians) to correct for which the rover will rotate with the minimal speed
+docking_rover/bias_max: 0.1           # the angle (in radians) to correct for which the rover will rotate with the maximum speed
 # docking_rover/timeout: 3.0         # specific timeout for "DockingRover" state blocking events

@@ -26,7 +26,7 @@ class CheckArea(smach.State):
     def __init__(
         self,
         outcomes=["docking_area", "outside_docking_area", "marker_lost", "preempted"],
-        input_keys=["action_goal"],
+        input_keys=["action_goal", "action_feedback", "action_result"],
         output_keys=["target_pose"],
         threshold_angle=0.26,  # 15 degrees
         docking_distance=2.0,
@@ -76,6 +76,9 @@ class CheckArea(smach.State):
         return dist_y <= max_value
 
     def service_preempt(self):
+        """Function called when the state catches preemption request.
+        Removes all the publishers and subscribers of the state.
+        """
         rospy.logwarn(f"Preemption request handling for '{self.state_log_name}' state.")
         self.marker_sub.unregister()
         return super().service_preempt()
@@ -90,17 +93,32 @@ class CheckArea(smach.State):
             "marker_detections", MarkerDetection, self.marker_callback, queue_size=1
         )
         self.marker = None
-        rospy.loginfo("Waiting for marker detection.")
+        rospy.loginfo(f"Waiting for marker (id: {self.marker_id}) detection.")
 
+        # if desired marker is not seen
         if not self.marker_flag.wait(self.timeout):
-            rospy.logerr("Marker lost. Docking failed.")
+            rospy.logerr(f"Marker (id: {self.marker_id}) lost. Docking failed.")
+            user_data.action_result.result = (
+                f"{self.state_log_name}: Marker lost. Docking failed."
+            )
+            # if preempt request came during waiting for the marker detection
+            # it won't be handled if the marker is not seen, but the request will stay and
+            # will be handled in the next call to the state machine, so there is need to
+            # call service_preempt method here
+            super().service_preempt()
             return "marker_lost"
+
+        if self.preempt_requested():
+            self.service_preempt()
+            user_data.action_result.result = f"{self.state_log_name}: state preempted."
+            return "preempted"
 
         # calculating the length of distances needed for threshold checking
         x_dist, y_dist = calculate_threshold_distances(self.marker)
 
         if self.check_threshold(x_dist, y_dist):
             self.marker_sub.unregister()
+            user_data.action_feedback.current_state = f"{self.state_log_name}: docking possible from current position. Proceeding to 'Reaching Docking Point` sequence."
             return "docking_area"
 
         # getting target pose
@@ -113,15 +131,12 @@ class CheckArea(smach.State):
             point,
         )
 
-        if self.preempt_requested():
-            self.service_preempt()
-            return "preempted"
-
         self.marker_sub.unregister()
 
         # passing calculated data to next states
         user_data.target_pose = target_pose
 
+        user_data.action_feedback.current_state = f"{self.state_log_name}: docking impossible from current position. Proceeding to 'Reaching Docking Area` sequence."
         return "outside_docking_area"
 
 
@@ -132,7 +147,7 @@ class BaseDockAreaState(smach.State):
     def __init__(
         self,
         outcomes=["succeeded", "odometry_not_working", "preempted"],
-        input_keys=["target_pose"],
+        input_keys=["target_pose", "action_feedback", "action_result"],
         output_keys=["target_pose"],
         timeout=3.0,
         speed_min=0.1,
@@ -245,6 +260,14 @@ class BaseDockAreaState(smach.State):
         if not self.odom_flag.wait(self.timeout):
             self.wheel_odom_sub.unregister()
             rospy.logerr("Didn't get wheel odometry message. Docking failed.")
+            user_data.action_result.result = (
+                f"{self.state_log_name}: wheel odometry not working. Docking failed."
+            )
+            # if preempt request came during waiting for an odometry message
+            # it won't be handled if the odometry doesn't work, but the request will stay and
+            # will be handled in the next call to the state machine, so there is need to
+            # call service_preempt method here
+            super().service_preempt()
             return "odometry_not_working"
 
         self.cmd_vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
@@ -255,6 +278,7 @@ class BaseDockAreaState(smach.State):
         # moving the rover
         outcome = self.movement_loop(route_left, self.angle)
         if outcome:
+            user_data.action_result.result = f"{self.state_log_name}: state preempted."
             return "preempted"
 
         self.cmd_vel_pub.unregister()
@@ -264,6 +288,7 @@ class BaseDockAreaState(smach.State):
         if self.output_len > 0:
             user_data.target_pose = target_pose
 
+        user_data.action_feedback.current_state = f"'Reaching Docking Area`: sequence completed. Proceeding to 'Check Area' state."
         return "succeeded"
 
     def wheel_odom_callback(self, data: Odometry) -> None:
@@ -279,6 +304,9 @@ class BaseDockAreaState(smach.State):
             self.calculate_route_done(self.odom_reference, data, self.angle)
 
     def service_preempt(self):
+        """Function called when the state catches preemption request.
+        Removes all the publishers and subscribers of the state.
+        """
         rospy.logwarn(f"Preemption request handling for {self.state_log_name} state")
         self.cmd_vel_pub.publish(Twist())
         self.cmd_vel_pub.unregister()

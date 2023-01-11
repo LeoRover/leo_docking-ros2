@@ -7,27 +7,64 @@ from actionlib_msgs.msg import GoalStatus
 from leo_docking.msg import PerformDockingAction, PerformDockingGoal
 
 
+def done_callback(status, result):
+    if status == GoalStatus.ABORTED:
+        log_method = rospy.logerr
+    elif status == GoalStatus.PREEMPTED:
+        log_method = rospy.logwarn
+    else:
+        log_method = rospy.loginfo
+
+    log_method(result)
+
+
 def feedback_callback(feedback):
     rospy.loginfo(feedback.current_state)
 
-if __name__ == "__main__":
-    rospy.init_node("docking_client")
-    myargv = rospy.myargv(argv=sys.argv)
-    
-    marker_id = int(myargv[1])
 
-    client = actionlib.SimpleActionClient("leo_docking_action_server", PerformDockingAction)
-    client.wait_for_server()
-    rospy.loginfo(f"Docking server active.")
-    goal = PerformDockingGoal(marker_id=marker_id)
-    r = rospy.Duration(0.1)
-    client.send_goal(goal, feedback_cb=feedback_callback)
-    status = None
+if __name__ == "__main__":
+    rospy.init_node("docking_client", disable_signals=True)
+    myargv = rospy.myargv(argv=sys.argv)
 
     try:
-        while status != GoalStatus.SUCCEEDED:
-            rospy.loginfo(f"Sending goal: marker_id={marker_id}")
-            rospy.sleep(r)
-    except KeyboardInterrupt as e:
-        rospy.logwarn(f"Cought Ctrl+C. Canceling docking.")
-        client.cancel_goal(goal)
+        marker_id = int(myargv[1])
+    except IndexError as e:
+        marker_id = 0
+
+    client = actionlib.SimpleActionClient(
+        "leo_docking_action_server", PerformDockingAction
+    )
+
+    rospy.loginfo(f"Waiting for 'leo_docking_action_server' server.")
+    server_up = client.wait_for_server(rospy.Duration(secs=3.0))
+
+    if not server_up:
+        rospy.logerr(f"Server 'leo_docking_action_server' not active.")
+        rospy.signal_shutdown(f"Server 'leo_docking_action_server' not active.")
+        exit()
+
+    rospy.loginfo(f"Docking server active.")
+    goal = PerformDockingGoal(marker_id=marker_id)
+
+    r = rospy.Rate(10)
+    status = None
+    canceled = False
+
+    client.send_goal(goal, feedback_cb=feedback_callback, done_callback=done_callback)
+    rospy.loginfo(f"Sending goal: marker_id={marker_id}")
+
+    while status not in [
+        GoalStatus.SUCCEEDED,
+        GoalStatus.ABORTED,
+        GoalStatus.PREEMPTED,
+    ]:
+        try:
+            status = client.get_state()
+            r.sleep()
+        except KeyboardInterrupt as e:
+            if not canceled:
+                rospy.logwarn(f"Cought Ctrl+C. Canceling docking.")
+                client.cancel_goal()
+                canceled = True
+
+    rospy.signal_shutdown(f"Docking finished.")

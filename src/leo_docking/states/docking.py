@@ -32,7 +32,7 @@ class BaseDockingState(smach.State):
     def __init__(
         self,
         outcomes=["succeeded", "odometry_not_working", "marker_lost", "preempted"],
-        input_keys=["action_goal"],
+        input_keys=["action_goal", "action_feedback", "action_result"],
         timeout=3.0,
         speed_min=0.1,
         speed_max=0.4,
@@ -206,8 +206,6 @@ class BaseDockingState(smach.State):
         self.odom_reference = None
         self.marker_id = user_data.action_goal.marker_id
 
-        self.vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
-
         self.marker_sub = rospy.Subscriber(
             "marker_detections", MarkerDetection, self.marker_callback, queue_size=1
         )
@@ -217,30 +215,53 @@ class BaseDockingState(smach.State):
         )
 
         if not self.marker_flag.wait(self.timeout):
-            rospy.logerr("Can't find marker. Docking failed.")
+            rospy.logerr(f"Marker (id: {self.marker_id}) lost. Docking failed.")
             self.marker_sub.unregister()
             self.wheel_odom_sub.unregister()
-            self.vel_pub.unregister()
+            user_data.action_result = (
+                f"{self.state_log_name}: Marker lost. Docking failed."
+            )
+            # if preempt request came during waiting for the marker detection
+            # it won't be handled if the marker is not seen, but the request will stay and
+            # will be handled in the next call to the state machine, so there is need to
+            # call service_preempt method here
+            super().service_preempt()
             return "marker_lost"
 
         if not self.odom_flag.wait(self.timeout):
             self.marker_sub.unregister()
             self.wheel_odom_sub.unregister()
-            self.vel_pub.unregister()
             rospy.logerr("Didn't get wheel odometry message. Docking failed.")
+            user_data.action_result.result = (
+                f"{self.state_log_name}: wheel odometry not working. Docking failed."
+            )
+            # if preempt request came during waiting for an odometry message
+            # it won't be handled if the odometry doesn't work, but the request will stay and
+            # will be handled in the next call to the state machine, so there is need to
+            # call service_preempt method here
+            super().service_preempt()
             return "odometry_not_working"
+
+        self.vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
 
         outcome = self.movement_loop()
         if outcome:
+            user_data.action_result.result = f"{self.state_log_name}: state preempted."
             return "preempted"
 
         self.wheel_odom_sub.unregister()
         self.marker_sub.unregister()
         self.vel_pub.unregister()
 
+        user_data.action_feedback.current_state = f"'Reaching Docking Point': sequence completed. Proceeding to 'Docking Rover' state."
+        if self.state_log_name == "Docking Rover":
+            user_data.action_result.result = "docking succeeded. Rover docked."
         return "succeeded"
 
     def service_preempt(self):
+        """Function called when the state catches preemption request.
+        Removes all the publishers and subscribers of the state.
+        """
         rospy.logwarn(f"Preemption request handling for {self.state_log_name} state")
         self.vel_pub.publish(Twist())
         self.vel_pub.unregister()
@@ -385,7 +406,7 @@ class ReachingDockingPoint(BaseDockingState):
                 if self.route_done + self.epsilon >= self.route_left:
                     break
 
-                linear_speed = self.movement_direction * translate(
+                msg.linear.x = self.movement_direction * translate(
                     self.route_left - self.route_done,
                     self.route_min,
                     self.route_max,
@@ -393,17 +414,13 @@ class ReachingDockingPoint(BaseDockingState):
                     self.speed_max,
                 )
 
-                msg.linear.x = linear_speed
-
-                angular_speed = self.bias_direction * translate(
+                msg.angular.z = self.bias_direction * translate(
                     self.bias_left - self.bias_done,
                     self.bias_min,
                     self.bias_max,
                     self.bias_speed_min,
                     self.bias_speed_max,
                 )
-
-                msg.angular.z = angular_speed
 
                 if self.preempt_requested():
                     self.service_preempt()
@@ -512,14 +529,16 @@ class DockingRover(BaseDockingState):
 
     def __init__(
         self,
-        input_keys=["action_goal"],
         timeout=3,
         speed_min=0.05,
         speed_max=0.2,
         route_min=0.05,
         route_max=0.8,
+        bias_min=0.01,
+        bias_max=0.10,
+        bias_speed_min=0.05,
+        bias_speed_max=0.3,
         epsilon=0.25,
-        docking_point_distance=0.6,
         debug=False,
         battery_diff=0.2,
         max_bat_average=11.0,
@@ -538,9 +557,6 @@ class DockingRover(BaseDockingState):
         else:
             epsilon = rospy.get_param("~epsilon", epsilon)
 
-        docking_point_distance = rospy.get_param(
-            "~docking_point_distance", docking_point_distance
-        )
         debug = rospy.get_param("~debug", debug)
 
         speed_min = rospy.get_param("~docking_rover/speed_min", speed_min)
@@ -549,14 +565,12 @@ class DockingRover(BaseDockingState):
         route_max = rospy.get_param("~docking_rover/distance_max", route_max)
 
         super().__init__(
-            input_keys=input_keys,
             timeout=timeout,
             speed_min=speed_min,
             speed_max=speed_max,
             route_min=route_min,
             route_max=route_max,
             epsilon=epsilon,
-            docking_point_distance=docking_point_distance,
             debug=debug,
             name=name,
         )
@@ -581,6 +595,18 @@ class DockingRover(BaseDockingState):
         self.effort_stop = False
         buff_size = rospy.get_param("~effort_buffer_size", effort_buffer_size)
         self.effort_buf = Queue(maxsize=buff_size)
+
+        self.bias_min = rospy.get_param("~docking_rover/bias_min", bias_min)
+        self.bias_max = rospy.get_param("~docking_rover/bias_max", bias_max)
+        self.bias_left = 0.0
+        self.bias_done = 0.0
+        self.bias_speed_min = rospy.get_param(
+            "~docking_rover/bias_speed_min", bias_speed_min
+        )
+        self.bias_speed_max = rospy.get_param(
+            "~docking_rover/bias_speed_max", bias_speed_max
+        )
+        self.bias_direction = 0.0
 
     def battery_callback(self, data: Float32) -> None:
         """Function called every time, there is new message published on the battery topic.
@@ -622,6 +648,9 @@ class DockingRover(BaseDockingState):
 
     def movement_loop(self):
         """Function performing rover movement; invoked in the "execute" method of the state."""
+        rospy.loginfo("Waiting for motors effort and battery voltage to drop.")
+        rospy.sleep(rospy.Duration(secs=1.0))
+
         with self.battery_lock:
             self.end_time = rospy.Time.now() + rospy.Duration(secs=self.collection_time)
 
@@ -639,6 +668,7 @@ class DockingRover(BaseDockingState):
         rospy.loginfo("Measuring battery data...")
         while rospy.Time.now() < self.end_time:
             r.sleep()
+
         rospy.loginfo("Batery voltage average level calculated. Performing docking.")
 
         msg = Twist()
@@ -674,6 +704,14 @@ class DockingRover(BaseDockingState):
                     self.speed_max,
                 )
 
+                msg.angular.z = self.bias_direction * translate(
+                    self.bias_left - self.bias_done,
+                    self.bias_min,
+                    self.bias_max,
+                    self.bias_speed_min,
+                    self.bias_speed_max,
+                )
+
                 if self.preempt_requested():
                     self.service_preempt()
                     return "preempted"
@@ -690,6 +728,15 @@ class DockingRover(BaseDockingState):
         self.route_left = math.sqrt(
             normalized_marker.p.x() ** 2 + normalized_marker.p.y() ** 2
         )
+
+        # calculating the correction for the docking point
+        dock_bias = math.atan2(normalized_marker.p.y(), normalized_marker.p.x())
+        self.bias_direction = 1.0 if dock_bias > 0.0 else -1.0
+        self.bias_left = math.fabs(dock_bias)
+
+    def calculate_route_done(self, odom_reference: Odometry, current_odom: Odometry):
+        self.route_done = distance_done_from_odom(odom_reference, current_odom)
+        self.bias_done = angle_done_from_odom(odom_reference, current_odom)
 
     def service_preempt(self):
         self.wheel_odom_sub.unregister()
