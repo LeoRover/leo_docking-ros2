@@ -543,7 +543,7 @@ class DockingRover(BaseDockingState):
         battery_diff=0.2,
         max_bat_average=11.0,
         battery_averaging_time=1.0,
-        effort_summary_threshold=2.5,
+        effort_summary_threshold=2.0,
         effort_buffer_size=10,
         name="Docking Rover",
     ):

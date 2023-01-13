@@ -50,7 +50,7 @@ if __name__ == "__main__":
     status = None
     canceled = False
 
-    client.send_goal(goal, feedback_cb=feedback_callback, done_callback=done_callback)
+    client.send_goal(goal, feedback_cb=feedback_callback, done_cb=done_callback)
     rospy.loginfo(f"Sending goal: marker_id={marker_id}")
 
     while status not in [
