@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 from threading import Lock, Event
 from queue import Queue
 import math
@@ -7,13 +8,14 @@ import numpy as np
 import rospy
 import tf2_ros
 import smach
-import PyKDL
 
 from aruco_opencv_msgs.msg import MarkerDetection, MarkerPose
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float32
 from sensor_msgs.msg import JointState
+
+import PyKDL
 
 from leo_docking.utils import (
     get_location_points_from_marker,
@@ -23,7 +25,6 @@ from leo_docking.utils import (
     translate,
     normalize_marker,
 )
-
 
 class BaseDockingState(smach.State):
     """Base class for the sequence states of the sub-state machine responsible
@@ -73,7 +74,7 @@ class BaseDockingState(smach.State):
         # debug variables
         self.debug = debug
         self.seq = 0
-        self.br = tf2_ros.TransformBroadcaster()
+        self.tf_broadcaster = tf2_ros.TransformBroadcaster()
 
     def calculate_route_left(self, marker: MarkerPose) -> None:
         """Function calculating route left (either angle left to target or linear distance)
@@ -85,10 +86,10 @@ class BaseDockingState(smach.State):
         """
         raise NotImplementedError()
 
-    def movement_loop(self) -> None:
+    def movement_loop(self) -> Optional[str]:
         """Function performing rover movement; invoked in the "execute" method of the state."""
         msg = Twist()
-        r = rospy.Rate(10)
+        rate = rospy.Rate(10)
 
         while True:
             with self.route_lock:
@@ -113,7 +114,7 @@ class BaseDockingState(smach.State):
                     return "preempted"
 
                 self.vel_pub.publish(msg)
-            r.sleep()
+            rate.sleep()
 
         self.vel_pub.publish(Twist())
         return None
@@ -121,8 +122,8 @@ class BaseDockingState(smach.State):
     def calculate_route_done(
         self, odom_reference: Odometry, current_odom: Odometry
     ) -> None:
-        """Function calculating route done (either angle, or distance)
-        from the odometry message saved in marker callback (odom_reference), to the current position.
+        """Function calculating route done (either angle, or distance) from the odometry message
+        saved in marker callback (odom_reference), to the current position.
         Saves the calculated route in a class variable "route_done".
 
         Args:
@@ -136,18 +137,17 @@ class BaseDockingState(smach.State):
 
     def marker_callback(self, data: MarkerDetection) -> None:
         """Function called every time, there is new MarkerDetection message published on the topic.
-        Calculates the route left from the detected marker, set's odometry reference,
-        and (if specified), sends debug tf's so you can visualize calculated target position in rviz.
+        Calculates the route left from the detected marker, set's odometry reference, and
+        (if specified), sends debug tf's so you can visualize calculated target position in rviz.
         """
         if len(data.markers) == 0:
             return
 
+        marker: MarkerPose
         for marker in data.markers:
             if marker.marker_id == self.marker_id:
                 if not self.marker_flag.is_set():
                     self.marker_flag.set()
-
-                marker: MarkerPose = data.markers[0]
 
                 if self.debug:
                     (
@@ -162,17 +162,17 @@ class BaseDockingState(smach.State):
                         "base_link",
                         "docking_point",
                         self.seq,
-                        self.br,
+                        self.tf_broadcaster,
                     )
 
-                    m = normalize_marker(marker)
+                    marker_normalized = normalize_marker(marker)
                     visualize_position(
-                        m.p,
-                        m.M.GetQuaternion(),
+                        marker_normalized.p,
+                        marker_normalized.M.GetQuaternion(),
                         "base_link",
                         "normalized_marker",
                         self.seq,
-                        self.br,
+                        self.tf_broadcaster,
                     )
 
                     self.seq += 1
@@ -187,7 +187,8 @@ class BaseDockingState(smach.State):
 
     def wheel_odom_callback(self, data: Odometry) -> None:
         """Function called every time, there is new Odometry message published on the topic.
-        Calculates the route done from the referance message saved in marker callback, and the current odometry pose.
+        Calculates the route done from the referance message saved in marker callback,
+        and the current odometry pose.
         """
         if not self.odom_flag.is_set():
             self.odom_flag.set()
@@ -198,13 +199,13 @@ class BaseDockingState(smach.State):
             if self.odom_reference:
                 self.calculate_route_done(self.odom_reference, self.current_odom)
 
-    def execute(self, user_data):
+    def execute(self, ud):
         """Main state method, executed automatically on state entered"""
         self.odom_flag.clear()
         self.marker_flag.clear()
         self.current_odom = None
         self.odom_reference = None
-        self.marker_id = user_data.action_goal.marker_id
+        self.marker_id = ud.action_goal.marker_id
 
         self.marker_sub = rospy.Subscriber(
             "marker_detections", MarkerDetection, self.marker_callback, queue_size=1
@@ -218,9 +219,7 @@ class BaseDockingState(smach.State):
             rospy.logerr(f"Marker (id: {self.marker_id}) lost. Docking failed.")
             self.marker_sub.unregister()
             self.wheel_odom_sub.unregister()
-            user_data.action_result = (
-                f"{self.state_log_name}: Marker lost. Docking failed."
-            )
+            ud.action_result = f"{self.state_log_name}: Marker lost. Docking failed."
             # if preempt request came during waiting for the marker detection
             # it won't be handled if the marker is not seen, but the request will stay and
             # will be handled in the next call to the state machine, so there is need to
@@ -232,7 +231,7 @@ class BaseDockingState(smach.State):
             self.marker_sub.unregister()
             self.wheel_odom_sub.unregister()
             rospy.logerr("Didn't get wheel odometry message. Docking failed.")
-            user_data.action_result.result = (
+            ud.action_result.result = (
                 f"{self.state_log_name}: wheel odometry not working. Docking failed."
             )
             # if preempt request came during waiting for an odometry message
@@ -246,16 +245,19 @@ class BaseDockingState(smach.State):
 
         outcome = self.movement_loop()
         if outcome:
-            user_data.action_result.result = f"{self.state_log_name}: state preempted."
+            ud.action_result.result = f"{self.state_log_name}: state preempted."
             return "preempted"
 
         self.wheel_odom_sub.unregister()
         self.marker_sub.unregister()
         self.vel_pub.unregister()
 
-        user_data.action_feedback.current_state = f"'Reaching Docking Point': sequence completed. Proceeding to 'Docking Rover' state."
+        ud.action_feedback.current_state = (
+            f"'Reaching Docking Point': sequence completed. "
+            f"Proceeding to 'Docking Rover' state."
+        )
         if self.state_log_name == "Docking Rover":
-            user_data.action_result.result = "docking succeeded. Rover docked."
+            ud.action_result.result = "docking succeeded. Rover docked."
         return "succeeded"
 
     def service_preempt(self):
@@ -272,7 +274,9 @@ class BaseDockingState(smach.State):
 
 class RotateToDockingPoint(BaseDockingState):
     """The first state of the sequence state machine getting rover to docking position;
-    responsible for rotating the rover towards the target point (default: 0.6m in straight line from docking base)."""
+    responsible for rotating the rover towards the target point.
+    (default: 0.6m in straight line from docking base).
+    """
 
     def __init__(
         self,
@@ -332,8 +336,11 @@ class RotateToDockingPoint(BaseDockingState):
 
 class ReachingDockingPoint(BaseDockingState):
     """The second state of the sequence state machine getting rover to docking position;
-    responsible for driving the rover to the target docking point (default: 0.6m in straight line from docking base).
-    Performs linear and angular movement, as it fixes it's orientation to be alwas looking on the docking point."""
+    responsible for driving the rover to the target docking point
+    (default: 0.6m in straight line from docking base).
+    Performs linear and angular movement, as it fixes it's orientation
+    to be always looking on the docking point.
+    """
 
     def __init__(
         self,
@@ -397,9 +404,9 @@ class ReachingDockingPoint(BaseDockingState):
         )
         self.bias_direction = 0.0
 
-    def movement_loop(self):
+    def movement_loop(self) -> Optional[str]:
         msg = Twist()
-        r = rospy.Rate(10)
+        rate = rospy.Rate(10)
 
         while True:
             with self.route_lock:
@@ -427,9 +434,10 @@ class ReachingDockingPoint(BaseDockingState):
                     return "preempted"
 
                 self.vel_pub.publish(msg)
-            r.sleep()
+            rate.sleep()
 
         self.vel_pub.publish(Twist())
+        return None
 
     def calculate_route_left(self, marker: MarkerPose):
         docking_point, _ = get_location_points_from_marker(
@@ -451,8 +459,9 @@ class ReachingDockingPoint(BaseDockingState):
 
 class ReachingDockingOrientation(BaseDockingState):
     """The third state of the sequence state machine getting rover to docking position;
-    responsible for rotating the rover toward marker on the docking base - a position where the rover needs
-    just to drive forward to reach the base"""
+    responsible for rotating the rover toward marker on the docking base - a position where the
+    rover needs just to drive forward to reach the base.
+    """
 
     def __init__(
         self,
@@ -521,9 +530,11 @@ class ReachingDockingOrientation(BaseDockingState):
 
 
 class DockingRover(BaseDockingState):
-    """State performing final phase of the docking - reaching the base. Drives the rover forward unitl one of three condition is satisfied:
-    - rover is close enoguh to the marker located on the docking base
-    - the voltage on the topic with battery data is higher than the average collected before docking (if the average was low enough at the beggining)
+    """State performing final phase of the docking - reaching the base.
+    Drives the rover forward unitl one of three condition is satisfied:
+    - rover is close enough to the marker located on the docking base
+    - the voltage on the topic with battery data is higher than the average collected before docking
+    (if the average was low enough at the beggining)
     - the effort on the wheel motors is high enough - the rover is pushing against the base
     """
 
@@ -628,7 +639,8 @@ class DockingRover(BaseDockingState):
 
     def effort_callback(self, data: JointState) -> None:
         """Function called every time, there is new JointState message published on the topic.
-        Calculates the sum of efforts on the wheel motors, and checks the wheel effort stop condition.
+        Calculates the sum of efforts on the wheel motors, and checks the wheel effort stop
+        condition.
         """
         with self.effort_lock:
             effort_sum = 0.0
@@ -646,7 +658,7 @@ class DockingRover(BaseDockingState):
 
             self.effort_buf.put_nowait(effort_sum)
 
-    def movement_loop(self):
+    def movement_loop(self) -> Optional[str]:
         """Function performing rover movement; invoked in the "execute" method of the state."""
         rospy.loginfo("Waiting for motors effort and battery voltage to drop.")
         rospy.sleep(rospy.Duration(secs=1.0))
@@ -662,17 +674,17 @@ class DockingRover(BaseDockingState):
             "joint_states", JointState, self.effort_callback, queue_size=1
         )
 
-        r = rospy.Rate(5)
+        rate = rospy.Rate(5)
 
         # waiting for the end of colleting data
         rospy.loginfo("Measuring battery data...")
         while rospy.Time.now() < self.end_time:
-            r.sleep()
+            rate.sleep()
 
         rospy.loginfo("Batery voltage average level calculated. Performing docking.")
 
         msg = Twist()
-        r = rospy.Rate(10)
+        rate = rospy.Rate(10)
 
         while True:
             with self.battery_lock:
@@ -717,11 +729,12 @@ class DockingRover(BaseDockingState):
                     return "preempted"
 
                 self.vel_pub.publish(msg)
-            r.sleep()
+            rate.sleep()
 
         self.vel_pub.publish(Twist())
         self.battery_sub.unregister()
         self.joint_state_sub.unregister()
+        return None
 
     def calculate_route_left(self, marker: MarkerPose) -> None:
         normalized_marker = normalize_marker(marker)

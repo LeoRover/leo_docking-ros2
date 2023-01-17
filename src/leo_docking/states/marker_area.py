@@ -1,13 +1,15 @@
 import math
 from threading import Event, Lock
+from typing import Optional
 
 import rospy
 import smach
-import PyKDL
 
 from aruco_opencv_msgs.msg import MarkerDetection, MarkerPose
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
+
+import PyKDL
 
 from leo_docking.utils import (
     translate,
@@ -83,12 +85,12 @@ class CheckArea(smach.State):
         self.marker_sub.unregister()
         return super().service_preempt()
 
-    def execute(self, user_data):
+    def execute(self, ud):
         """Main state method invoked on state entered.
         Checks rover position and eventually calculates target pose of the rover.
         """
         self.marker_flag.clear()
-        self.marker_id = user_data.action_goal.marker_id
+        self.marker_id = ud.action_goal.marker_id
         self.marker_sub = rospy.Subscriber(
             "marker_detections", MarkerDetection, self.marker_callback, queue_size=1
         )
@@ -98,7 +100,7 @@ class CheckArea(smach.State):
         # if desired marker is not seen
         if not self.marker_flag.wait(self.timeout):
             rospy.logerr(f"Marker (id: {self.marker_id}) lost. Docking failed.")
-            user_data.action_result.result = (
+            ud.action_result.result = (
                 f"{self.state_log_name}: Marker lost. Docking failed."
             )
             # if preempt request came during waiting for the marker detection
@@ -110,7 +112,7 @@ class CheckArea(smach.State):
 
         if self.preempt_requested():
             self.service_preempt()
-            user_data.action_result.result = f"{self.state_log_name}: state preempted."
+            ud.action_result.result = f"{self.state_log_name}: state preempted."
             return "preempted"
 
         # calculating the length of distances needed for threshold checking
@@ -118,7 +120,10 @@ class CheckArea(smach.State):
 
         if self.check_threshold(x_dist, y_dist):
             self.marker_sub.unregister()
-            user_data.action_feedback.current_state = f"{self.state_log_name}: docking possible from current position. Proceeding to 'Reaching Docking Point` sequence."
+            ud.action_feedback.current_state = (
+                f"{self.state_log_name}: docking possible from current position. "
+                f"Proceeding to 'Reaching Docking Point` sequence."
+            )
             return "docking_area"
 
         # getting target pose
@@ -131,9 +136,12 @@ class CheckArea(smach.State):
         self.marker_sub.unregister()
 
         # passing calculated data to next states
-        user_data.target_pose = target_pose
+        ud.target_pose = target_pose
 
-        user_data.action_feedback.current_state = f"{self.state_log_name}: docking impossible from current position. Proceeding to 'Reaching Docking Area` sequence."
+        ud.action_feedback.current_state = (
+            f"{self.state_log_name}: docking impossible from current position. "
+            f"Proceeding to 'Reaching Docking Area` sequence."
+        )
         return "outside_docking_area"
 
 
@@ -195,13 +203,14 @@ class BaseDockAreaState(smach.State):
         from target pose.
 
         Args:
-            target_pose: (PyKDL.Frame) target pose of the rover at the end of the docking phase (sub-state machine)
+            target_pose: (PyKDL.Frame) target pose of the rover at the end of the docking phase
+                         (sub-state machine)
         Returns:
             route_left: (float) calculated route that is left to traverse
         """
         raise NotImplementedError()
 
-    def movement_loop(self, route_left: float, angle: bool = True) -> None:
+    def movement_loop(self, route_left: float, angle: bool = True) -> Optional[str]:
         """Function performing rover movement; invoked in the "execute" method of the state.
 
         Args:
@@ -212,7 +221,7 @@ class BaseDockAreaState(smach.State):
         route_left = math.fabs(route_left)
         msg = Twist()
 
-        r = rospy.Rate(10)
+        rate = rospy.Rate(10)
 
         while True:
             with self.route_lock:
@@ -237,13 +246,13 @@ class BaseDockAreaState(smach.State):
                     return "preempted"
 
                 self.cmd_vel_pub.publish(msg)
-            r.sleep()
+            rate.sleep()
 
         self.cmd_vel_pub.publish(Twist())
 
         return None
 
-    def execute(self, user_data):
+    def execute(self, ud):
         """Main state method, executed automatically on state entered"""
         self.odom_flag.clear()
         self.odom_reference = None
@@ -257,7 +266,7 @@ class BaseDockAreaState(smach.State):
         if not self.odom_flag.wait(self.timeout):
             self.wheel_odom_sub.unregister()
             rospy.logerr("Didn't get wheel odometry message. Docking failed.")
-            user_data.action_result.result = (
+            ud.action_result.result = (
                 f"{self.state_log_name}: wheel odometry not working. Docking failed."
             )
             # if preempt request came during waiting for an odometry message
@@ -269,13 +278,13 @@ class BaseDockAreaState(smach.State):
 
         self.cmd_vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
 
-        target_pose: PyKDL.Frame = user_data.target_pose
+        target_pose: PyKDL.Frame = ud.target_pose
         # calculating route left
         route_left = self.calculate_route_left(target_pose)
         # moving the rover
         outcome = self.movement_loop(route_left, self.angle)
         if outcome:
-            user_data.action_result.result = f"{self.state_log_name}: state preempted."
+            ud.action_result.result = f"{self.state_log_name}: state preempted."
             return "preempted"
 
         self.cmd_vel_pub.unregister()
@@ -283,9 +292,12 @@ class BaseDockAreaState(smach.State):
 
         # passing the data to next state
         if self.output_len > 0:
-            user_data.target_pose = target_pose
+            ud.target_pose = target_pose
 
-        user_data.action_feedback.current_state = f"'Reaching Docking Area`: sequence completed. Proceeding to 'Check Area' state."
+        ud.action_feedback.current_state = (
+            f"'Reaching Docking Area`: sequence completed. "
+            f"Proceeding to 'Check Area' state."
+        )
         return "succeeded"
 
     def wheel_odom_callback(self, data: Odometry) -> None:
@@ -313,7 +325,8 @@ class BaseDockAreaState(smach.State):
 
 class RotateToDockArea(BaseDockAreaState):
     """The first state of the sequence state machine getting rover to docking area;
-    responsible for rotating the rover towards target point in the area (default: 2m in straight line from docking base)."""
+    responsible for rotating the rover towards target point in the area (default: 2m in straight
+    line from docking base)."""
 
     def __init__(
         self,
@@ -361,7 +374,8 @@ class RotateToDockArea(BaseDockAreaState):
 
 class RideToDockArea(BaseDockAreaState):
     """The second state of the sequence state machine getting rover to docking area;
-    responsible for driving the rover to the target point in the area (default: 2m in straight line from docking base)"""
+    responsible for driving the rover to the target point in the area (default: 2m in straight line
+    from docking base)"""
 
     def __init__(
         self,
@@ -455,7 +469,8 @@ class RotateToMarker(BaseDockAreaState):
         position: PyKDL.Vector = target_pose.p
         # calculating rotation done in the first state of sequence
         angle_done = math.atan2(position.y(), position.x())
-        # rotating target pose by -angle, so the target orientation is looking at marker again (initial target pose is in the `base_link` frame)
+        # rotating target pose by -angle, so the target orientation is looking at marker again
+        # (initial target pose is in the `base_link` frame)
         target_pose.M.DoRotZ(-angle_done)
         route_left = target_pose.M.GetRPY()[2]
 

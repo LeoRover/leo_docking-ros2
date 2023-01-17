@@ -1,15 +1,16 @@
 from __future__ import annotations
+from typing import Tuple
 
 import math
 
-import PyKDL
 import tf2_ros
 import rospy
-
 
 from geometry_msgs.msg import TransformStamped, Pose
 from aruco_opencv_msgs.msg import MarkerPose
 from nav_msgs.msg import Odometry
+
+import PyKDL
 
 
 def frame_to_pose(frame: PyKDL.Frame) -> Pose:
@@ -39,7 +40,8 @@ def frame_to_pose(frame: PyKDL.Frame) -> Pose:
 
 
 def pose_to_frame(pose: Pose) -> PyKDL.Frame:
-    """Function converting rospy Pose object to PyKDL Frame object (hardcodes z coordinate equal to 0.0).
+    """Function converting rospy Pose object to PyKDL Frame object (hardcodes z coordinate equal
+    to 0.0).
 
     Args:
         pose: rospy Pose to be converted
@@ -66,8 +68,9 @@ def pose_to_frame(pose: Pose) -> PyKDL.Frame:
 def normalize_marker(marker: MarkerPose) -> PyKDL.Frame:
     """Function normalizig pose of detected marker in base_link frame:
     - position: puts marker on level z = 0.0.
-    - orientation: calculates marker's yaw from unit vector z (vector looking in z axis) in respect to marker with arctangent,
-                   and normalizes the orientation - makes marker have x,y,z axis in the same scheme as rover has (x, y, z - forward, left, up).
+    - orientation: calculates marker's yaw from unit vector z (vector looking in z axis) in respect
+                   to marker with arctangent, and normalizes the orientation - makes marker have
+                   x,y,z axis in the same scheme as rover has (x, y, z - forward, left, up).
 
     Args:
         marker: pose of detected marker used for localization of docking station
@@ -94,16 +97,20 @@ def normalize_marker(marker: MarkerPose) -> PyKDL.Frame:
 
 def get_location_points_from_marker(
     marker: MarkerPose, distance: float = 0.0
-) -> tuple[PyKDL.Vector, tuple[float, float, float, float]]:
-    """Function calculating from detected marker a pose and orientation that rover should have before riding on the docking station.
+) -> Tuple[PyKDL.Vector, Tuple[float, float, float, float]]:
+    """Function calculating from detected marker a pose and orientation that rover should have
+    before riding on the docking station.
 
     Args:
         marker: pose of the marker used for calculating the final pose and orientation
-        distance: distance (in meters) of the desired position from the marker on the docking station
+        distance: distance (in meters) of the desired position from the marker on the docking
+                  station
 
     Returns:
-        docking_point: point in front of the docking station away by `distance` - point where rover can freely rotate without moving docking station
-        docking_orientation: target orientation of the rover before reaching docking station; tuple representing quaternion (x, y, z, w)
+        docking_point: point in front of the docking station away by `distance` - point where rover
+                       can freely rotate without moving docking station
+        docking_orientation: target orientation of the rover before reaching docking station; tuple
+                             representing quaternion (x, y, z, w)
     """
     marker_frame = normalize_marker(marker)
 
@@ -129,7 +136,8 @@ def calculate_odom_diff_pose(
         current_odom_pose: current odometry pose of robot
 
     Returns:
-        diff_pose: difference pose; represents distance and rotation made from `start_odom_pose` to `current_odom_pose`
+        diff_pose: difference pose; represents distance and rotation made from `start_odom_pose` to
+                   `current_odom_pose`
     """
 
     start_odom_frame = pose_to_frame(start_odom_pose.pose.pose).Inverse()
@@ -189,7 +197,7 @@ def visualize_position(
     frame_id: str,
     child_frame_id: str,
     seq: int,
-    br: tf2_ros.TransformBroadcaster,
+    tf_broadcaster: tf2_ros.TransformBroadcaster,
 ) -> None:
     """Function used for visualizing poses in rviz as transforms. Used only for debug.
 
@@ -222,39 +230,39 @@ def visualize_position(
     msg.header.seq = seq
 
     # sending transform
-    br.sendTransform(msg)
+    tf_broadcaster.sendTransform(msg)
 
 
-def translate(value, leftMin, leftMax, rightMin, rightMax) -> float:
+def translate(value, left_min, left_max, right_min, right_max) -> float:
     """Function proportionaly translating value from one interval into second interval.
 
     Args:
         value: value to be translated
-        leftMin: minimal value of the first interval
-        leftMax: maximal value of the first interval
-        rightMin: minimal value of the second interval
-        rightMax: maximal value of the second interval
+        left_min: minimal value of the first interval
+        left_max: maximal value of the first interval
+        right_min: minimal value of the second interval
+        right_max: maximal value of the second interval
 
     Returns:
         ans: translated `value` in second interval
     """
 
     # placing the value in the first interval boundaries
-    value = min(max(value, leftMin), leftMax)
+    value = min(max(value, left_min), left_max)
 
     # Figure out how 'wide' each range is
-    leftSpan = leftMax - leftMin
-    rightSpan = rightMax - rightMin
+    left_span = left_max - left_min
+    right_span = right_max - right_min
 
     # Convert the left range into a 0-1 range (float)
-    valueScaled = float(value - leftMin) / float(leftSpan)
+    value_scaled = float(value - left_min) / float(left_span)
 
     # Convert the 0-1 range into a value in the right range.
-    ans = rightMin + (valueScaled * rightSpan)
+    ans = right_min + (value_scaled * right_span)
     return ans
 
 
-def calculate_threshold_distances(marker: MarkerPose) -> tuple[float, float]:
+def calculate_threshold_distances(marker: MarkerPose) -> Tuple[float, float]:
     """Function calculating the distance from rover to marker sight
     (x axis of the marker frame) and how far on the marker's x axis the rover is.
     which are needed for the area threshold checking.
@@ -280,11 +288,11 @@ def calculate_threshold_distances(marker: MarkerPose) -> tuple[float, float]:
     perpend_coeff_b = 0.0
 
     # getting crssing point of the two lines
-    x = (perpend_coeff_b - coeff_b) / (coeff_a - perpend_coeff_a)
-    y = coeff_a * x + coeff_b
+    x_cross = (perpend_coeff_b - coeff_b) / (coeff_a - perpend_coeff_a)
+    y_cross = coeff_a * x_cross + coeff_b
 
-    y_dist = math.sqrt(x ** 2 + y ** 2)
+    y_dist = math.sqrt(x_cross ** 2 + y_cross ** 2)
 
-    x_dist = math.sqrt((x - position.x()) ** 2 + (y - position.y()) ** 2)
+    x_dist = math.sqrt((x_cross - position.x()) ** 2 + (y_cross - position.y()) ** 2)
 
     return x_dist, y_dist
