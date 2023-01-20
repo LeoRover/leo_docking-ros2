@@ -652,8 +652,6 @@ class DockingRover(BaseDockingState):
                 avr = np.mean(buffer_to_np)
 
                 if avr >= self.effort_threshold:
-                    print(avr)
-                    print(buffer_to_np)
                     self.effort_stop = True
 
                 self.effort_buf.get_nowait()
