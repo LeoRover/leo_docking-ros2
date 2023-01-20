@@ -604,8 +604,8 @@ class DockingRover(BaseDockingState):
             "~effort_threshold", effort_summary_threshold
         )
         self.effort_stop = False
-        buff_size = rospy.get_param("~effort_buffer_size", effort_buffer_size)
-        self.effort_buf = Queue(maxsize=buff_size)
+        self.buff_size = rospy.get_param("~effort_buffer_size", effort_buffer_size)
+        # self.effort_buf = Queue(maxsize=self.buff_size)
 
         self.bias_min = rospy.get_param("~docking_rover/bias_min", bias_min)
         self.bias_max = rospy.get_param("~docking_rover/bias_max", bias_max)
@@ -652,6 +652,8 @@ class DockingRover(BaseDockingState):
                 avr = np.mean(buffer_to_np)
 
                 if avr >= self.effort_threshold:
+                    print(avr)
+                    print(buffer_to_np)
                     self.effort_stop = True
 
                 self.effort_buf.get_nowait()
@@ -663,15 +665,13 @@ class DockingRover(BaseDockingState):
         rospy.loginfo("Waiting for motors effort and battery voltage to drop.")
         rospy.sleep(rospy.Duration(secs=1.0))
 
+        self.effort_buf = Queue(maxsize=self.buff_size)
+
         with self.battery_lock:
             self.end_time = rospy.Time.now() + rospy.Duration(secs=self.collection_time)
 
         self.battery_sub = rospy.Subscriber(
             "firmware/battery", Float32, self.battery_callback, queue_size=1
-        )
-
-        self.joint_state_sub = rospy.Subscriber(
-            "joint_states", JointState, self.effort_callback, queue_size=1
         )
 
         rate = rospy.Rate(5)
@@ -682,6 +682,10 @@ class DockingRover(BaseDockingState):
             rate.sleep()
 
         rospy.loginfo("Batery voltage average level calculated. Performing docking.")
+
+        self.joint_state_sub = rospy.Subscriber(
+            "joint_states", JointState, self.effort_callback, queue_size=1
+        )
 
         msg = Twist()
         rate = rospy.Rate(10)
