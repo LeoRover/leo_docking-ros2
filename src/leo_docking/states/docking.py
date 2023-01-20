@@ -26,6 +26,7 @@ from leo_docking.utils import (
     normalize_marker,
 )
 
+
 class BaseDockingState(smach.State):
     """Base class for the sequence states of the sub-state machine responsible
     for getting the rover in the docking position."""
@@ -329,9 +330,12 @@ class RotateToDockingPoint(BaseDockingState):
             marker, distance=self.docking_point_distance
         )
 
-        angle = math.atan2(docking_point.y(), docking_point.x())
-        self.movement_direction = 1 if angle >= 0 else -1
-        self.route_left = math.fabs(angle)
+        if math.sqrt(docking_point.y() ** 2 + docking_point.x() ** 2) < 0.1:
+            self.route_left = 0.0
+        else:
+            angle = math.atan2(docking_point.y(), docking_point.x())
+            self.movement_direction = 1 if angle >= 0 else -1
+            self.route_left = math.fabs(angle)
 
 
 class ReachingDockingPoint(BaseDockingState):
@@ -591,10 +595,7 @@ class DockingRover(BaseDockingState):
         self.battery_threshold = rospy.get_param(
             "~max_battery_average", max_bat_average
         )
-        self.charging = False
-        self.battery_reference = None
-        self.acc_data = 0.0
-        self.counter = 0
+
         self.collection_time = rospy.get_param(
             "~battery_averaging_time", battery_averaging_time
         )
@@ -603,9 +604,8 @@ class DockingRover(BaseDockingState):
         self.effort_threshold = rospy.get_param(
             "~effort_threshold", effort_summary_threshold
         )
-        self.effort_stop = False
+
         self.buff_size = rospy.get_param("~effort_buffer_size", effort_buffer_size)
-        # self.effort_buf = Queue(maxsize=self.buff_size)
 
         self.bias_min = rospy.get_param("~docking_rover/bias_min", bias_min)
         self.bias_max = rospy.get_param("~docking_rover/bias_max", bias_max)
@@ -660,10 +660,14 @@ class DockingRover(BaseDockingState):
 
     def movement_loop(self) -> Optional[str]:
         """Function performing rover movement; invoked in the "execute" method of the state."""
-        rospy.loginfo("Waiting for motors effort and battery voltage to drop.")
-        rospy.sleep(rospy.Duration(secs=1.0))
+        self.charging = False
+        self.battery_reference = None
+        self.acc_data = 0.0
+        self.counter = 0
+        self.effort_stop = False
 
-        self.effort_buf = Queue(maxsize=self.buff_size)
+        rospy.loginfo("Waiting for motors effort and battery voltage to drop.")
+        rospy.sleep(rospy.Duration(secs=2.0))
 
         with self.battery_lock:
             self.end_time = rospy.Time.now() + rospy.Duration(secs=self.collection_time)
@@ -672,14 +676,14 @@ class DockingRover(BaseDockingState):
             "firmware/battery", Float32, self.battery_callback, queue_size=1
         )
 
-        rate = rospy.Rate(5)
-
         # waiting for the end of colleting data
         rospy.loginfo("Measuring battery data...")
         while rospy.Time.now() < self.end_time:
-            rate.sleep()
+            rospy.sleep(rospy.Duration(secs=0.2))
 
         rospy.loginfo("Batery voltage average level calculated. Performing docking.")
+
+        self.effort_buf = Queue(maxsize=self.buff_size)
 
         self.joint_state_sub = rospy.Subscriber(
             "joint_states", JointState, self.effort_callback, queue_size=1
