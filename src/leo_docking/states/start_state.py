@@ -23,9 +23,16 @@ class StartState(smach.State):
             self.timeout = rospy.get_param("~timeout", timeout)
 
         self.marker_flag: Event = Event()
-        self.marker_id = None
 
         self.state_log_name = name
+
+        self.marker_id = None
+
+        self.reset_state()
+
+    def reset_state(self):
+        self.marker_id = None
+        self.marker_flag.clear()
 
     def marker_callback(self, data: MarkerDetection):
         """Function called every time, there is new MarkerDetection message published on the topic.
@@ -49,7 +56,8 @@ class StartState(smach.State):
 
     def execute(self, ud):
         """Main state method, executed automatically on state entered"""
-        self.marker_flag.clear()
+        self.reset_state()
+
         self.marker_id = ud.action_goal.marker_id
         rospy.loginfo(
             f"Waiting for marker detection. Required marker_id: {self.marker_id}"

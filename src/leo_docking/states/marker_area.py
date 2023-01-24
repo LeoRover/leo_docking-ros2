@@ -48,9 +48,18 @@ class CheckArea(smach.State):
             self.timeout = rospy.get_param("~timeout", timeout)
 
         self.marker_flag = Event()
-        self.marker_id = None
 
         self.state_log_name = name
+
+        self.marker = None
+        self.marker_id = None
+
+        self.reset_state()
+
+    def reset_state(self):
+        self.marker_id = None
+        self.marker_flag.clear()
+        self.marker = None
 
     def marker_callback(self, data: MarkerDetection):
         """Function called everu time, there is new MarkerDetection message published on the topic.
@@ -89,12 +98,12 @@ class CheckArea(smach.State):
         """Main state method invoked on state entered.
         Checks rover position and eventually calculates target pose of the rover.
         """
-        self.marker_flag.clear()
+        self.reset_state()
+
         self.marker_id = ud.action_goal.marker_id
         self.marker_sub = rospy.Subscriber(
             "marker_detections", MarkerDetection, self.marker_callback, queue_size=1
         )
-        self.marker = None
         rospy.loginfo(f"Waiting for marker (id: {self.marker_id}) detection.")
 
         # if desired marker is not seen
@@ -174,12 +183,20 @@ class BaseDockAreaState(smach.State):
         self.angle = angle
 
         self.output_len = len(output_keys)
-        self.route_done = 0.0
-        self.odom_reference: Odometry = None
         self.odom_flag: Event = Event()
         self.route_lock: Lock = Lock()
 
         self.state_log_name = name
+
+        self.route_done = 0.0
+        self.odom_reference = None
+
+        self.reset_state()
+
+    def reset_state(self):
+        self.odom_reference = None
+        self.odom_flag.clear()
+        self.route_done = 0.0
 
     def calculate_route_done(
         self, odom_reference: Odometry, current_odom: Odometry, angle: bool = True
@@ -254,9 +271,7 @@ class BaseDockAreaState(smach.State):
 
     def execute(self, ud):
         """Main state method, executed automatically on state entered"""
-        self.odom_flag.clear()
-        self.odom_reference = None
-        self.route_done = 0.0
+        self.reset_state()
 
         self.wheel_odom_sub = rospy.Subscriber(
             "wheel_odom_with_covariance", Odometry, self.wheel_odom_callback

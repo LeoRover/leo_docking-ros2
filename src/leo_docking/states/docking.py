@@ -65,7 +65,7 @@ class BaseDockingState(smach.State):
 
         self.route_left = 0.0
         self.route_done = -1.0
-        self.movement_direction = 1.0
+        self.movement_direction = 0.0
         self.angle = angle
 
         self.marker_id = None
@@ -76,6 +76,22 @@ class BaseDockingState(smach.State):
         self.debug = debug
         self.seq = 0
         self.tf_broadcaster = tf2_ros.TransformBroadcaster()
+
+        self.reset_state()
+
+    def reset_state(self):
+        self.marker_flag.clear()
+        self.odom_flag.clear()
+        self.odom_reference = None
+        self.current_odom = None
+
+        self.route_left = 0.0
+        self.route_done = -1.0
+        self.movement_direction = 0.0
+
+        self.marker_id = None
+
+        self.seq = 0
 
     def calculate_route_left(self, marker: MarkerPose) -> None:
         """Function calculating route left (either angle left to target or linear distance)
@@ -202,10 +218,8 @@ class BaseDockingState(smach.State):
 
     def execute(self, ud):
         """Main state method, executed automatically on state entered"""
-        self.odom_flag.clear()
-        self.marker_flag.clear()
-        self.current_odom = None
-        self.odom_reference = None
+        self.reset_state()
+
         self.marker_id = ud.action_goal.marker_id
 
         self.marker_sub = rospy.Subscriber(
@@ -408,6 +422,14 @@ class ReachingDockingPoint(BaseDockingState):
         )
         self.bias_direction = 0.0
 
+        self.reset_state()
+
+    def reset_state(self):
+        self.bias_done = 0.0
+        self.bias_left = 0.0
+        self.bias_direction = 0.0
+        return super().reset_state()
+
     def movement_loop(self) -> Optional[str]:
         msg = Twist()
         rate = rospy.Rate(10)
@@ -579,6 +601,8 @@ class DockingRover(BaseDockingState):
         route_min = rospy.get_param("~docking_rover/distance_min", route_min)
         route_max = rospy.get_param("~docking_rover/distance_max", route_max)
 
+        self.buff_size = rospy.get_param("~effort_buffer_size", effort_buffer_size)
+
         super().__init__(
             timeout=timeout,
             speed_min=speed_min,
@@ -605,8 +629,6 @@ class DockingRover(BaseDockingState):
             "~effort_threshold", effort_summary_threshold
         )
 
-        self.buff_size = rospy.get_param("~effort_buffer_size", effort_buffer_size)
-
         self.bias_min = rospy.get_param("~docking_rover/bias_min", bias_min)
         self.bias_max = rospy.get_param("~docking_rover/bias_max", bias_max)
         self.bias_left = 0.0
@@ -618,6 +640,21 @@ class DockingRover(BaseDockingState):
             "~docking_rover/bias_speed_max", bias_speed_max
         )
         self.bias_direction = 0.0
+
+        self.reset_state()
+
+    def reset_state(self):
+        self.bias_direction = 0.0
+        self.bias_left = 0.0
+        self.bias_done = 0.0
+        self.charging = False
+        self.battery_reference = None
+        self.acc_data = 0.0
+        self.counter = 0
+        self.effort_stop = False
+        self.effort_buf = Queue(maxsize=self.buff_size)
+
+        return super().reset_state()
 
     def battery_callback(self, data: Float32) -> None:
         """Function called every time, there is new message published on the battery topic.
@@ -660,11 +697,12 @@ class DockingRover(BaseDockingState):
 
     def movement_loop(self) -> Optional[str]:
         """Function performing rover movement; invoked in the "execute" method of the state."""
-        self.charging = False
-        self.battery_reference = None
-        self.acc_data = 0.0
-        self.counter = 0
-        self.effort_stop = False
+        # self.charging = False
+        # self.battery_reference = None
+        # self.acc_data = 0.0
+        # self.counter = 0
+        # self.effort_stop = False
+        # self.effort_buf = Queue(maxsize=self.buff_size)
 
         rospy.loginfo("Waiting for motors effort and battery voltage to drop.")
         rospy.sleep(rospy.Duration(secs=2.0))
@@ -683,14 +721,11 @@ class DockingRover(BaseDockingState):
 
         rospy.loginfo("Batery voltage average level calculated. Performing docking.")
 
-        self.effort_buf = Queue(maxsize=self.buff_size)
-
         self.joint_state_sub = rospy.Subscriber(
             "joint_states", JointState, self.effort_callback, queue_size=1
         )
 
         msg = Twist()
-        rate = rospy.Rate(10)
 
         while True:
             with self.battery_lock:
@@ -735,7 +770,7 @@ class DockingRover(BaseDockingState):
                     return "preempted"
 
                 self.vel_pub.publish(msg)
-            rate.sleep()
+            rospy.sleep(rospy.Duration(secs=0.1))
 
         self.vel_pub.publish(Twist())
         self.battery_sub.unregister()
@@ -750,6 +785,7 @@ class DockingRover(BaseDockingState):
 
         # calculating the correction for the docking point
         dock_bias = math.atan2(normalized_marker.p.y(), normalized_marker.p.x())
+        self.movement_direction = 1.0 if normalized_marker.p.x() >= 0.0 else -1.0
         self.bias_direction = 1.0 if dock_bias > 0.0 else -1.0
         self.bias_left = math.fabs(dock_bias)
 
