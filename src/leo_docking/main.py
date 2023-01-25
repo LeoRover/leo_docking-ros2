@@ -182,8 +182,13 @@ def main():
         result_key="action_result",
     )
 
-    # Run the server in a background thread
+    # Create and start the introspection server
     sis = smach_ros.IntrospectionServer("leo_docking", sm, "/LEO_DOCKING")
     sis.start()
+
+    # Run the action server in a background thread
     asw.run_server()
+
+    # Wait for ctrl-c to stop the application
+    rospy.spin()
     sis.stop()
