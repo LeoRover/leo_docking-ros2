@@ -19,9 +19,7 @@ from leo_docking.states import (
 )
 
 
-def main():
-    rospy.init_node("leo_docking", log_level=rospy.INFO)
-
+def create_state_machine() -> smach.StateMachine:
     sm = smach.StateMachine(
         outcomes=["ROVER DOCKED", "DOCKING FAILED", "DOCKING PREEMPTED"],
         input_keys=["action_goal", "action_feedback", "action_result"],
@@ -163,6 +161,14 @@ def main():
                 "action_result": "action_result",
             },
         )
+
+    return sm
+
+
+def main():
+    rospy.init_node("leo_docking", log_level=rospy.INFO)
+
+    sm = create_state_machine()
 
     asw = ActionServerWrapper(
         "leo_docking_action_server",
