@@ -264,10 +264,10 @@ class BaseDockingState(smach.State):
         self.vel_pub.unregister()
 
         ud.action_feedback.current_state = (
-            f"'Reaching Docking Point': sequence completed. "
-            f"Proceeding to 'Docking Rover' state."
+            f"'Reach Docking Point': sequence completed. "
+            f"Proceeding to 'Dock' state."
         )
-        if self.state_log_name == "Docking Rover":
+        if self.state_log_name == "Dock":
             ud.action_result.result = "docking succeeded. Rover docked."
         return "succeeded"
 
@@ -371,15 +371,15 @@ class ReachDockingPoint(BaseDockingState):
         docking_point_distance=0.6,
         debug=True,
         angular=False,
-        name="Reaching Docking Point",
+        name="Reach Docking Point",
     ):
-        if rospy.has_param("~reaching_docking_point/timeout"):
-            timeout = rospy.get_param("~reaching_docking_point/timeout", timeout)
+        if rospy.has_param("~reach_docking_point/timeout"):
+            timeout = rospy.get_param("~reach_docking_point/timeout", timeout)
         else:
             timeout = rospy.get_param("~timeout", timeout)
 
-        if rospy.has_param("~reaching_docking_point/epsilon"):
-            epsilon = rospy.get_param("~reaching_docking_point/epsilon", epsilon)
+        if rospy.has_param("~reach_docking_point/epsilon"):
+            epsilon = rospy.get_param("~reach_docking_point/epsilon", epsilon)
         else:
             epsilon = rospy.get_param("~epsilon", epsilon)
 
@@ -388,10 +388,10 @@ class ReachDockingPoint(BaseDockingState):
         )
         debug = rospy.get_param("~debug", debug)
 
-        speed_min = rospy.get_param("~reaching_docking_point/speed_min", speed_min)
-        speed_max = rospy.get_param("~reaching_docking_point/speed_max", speed_max)
-        dist_min = rospy.get_param("~reaching_docking_point/distance_min", dist_min)
-        dist_max = rospy.get_param("~reaching_docking_point/distance_max", dist_max)
+        speed_min = rospy.get_param("~reach_docking_point/speed_min", speed_min)
+        speed_max = rospy.get_param("~reach_docking_point/speed_max", speed_max)
+        dist_min = rospy.get_param("~reach_docking_point/distance_min", dist_min)
+        dist_max = rospy.get_param("~reach_docking_point/distance_max", dist_max)
 
         super().__init__(
             timeout=timeout,
@@ -406,15 +406,15 @@ class ReachDockingPoint(BaseDockingState):
             name=name,
         )
 
-        self.bias_min = rospy.get_param("~reaching_docking_point/bias_min", bias_min)
-        self.bias_max = rospy.get_param("~reaching_docking_point/bias_max", bias_max)
+        self.bias_min = rospy.get_param("~reach_docking_point/bias_min", bias_min)
+        self.bias_max = rospy.get_param("~reach_docking_point/bias_max", bias_max)
         self.bias_left = 0.0
         self.bias_done = 0.0
         self.bias_speed_min = rospy.get_param(
-            "~reaching_docking_point/bias_speed_min", bias_speed_min
+            "~reach_docking_point/bias_speed_min", bias_speed_min
         )
         self.bias_speed_max = rospy.get_param(
-            "~reaching_docking_point/bias_speed_max", bias_speed_max
+            "~reach_docking_point/bias_speed_max", bias_speed_max
         )
         self.bias_direction = 0.0
 
@@ -496,15 +496,15 @@ class ReachDockingOrientation(BaseDockingState):
         docking_point_distance=0.6,
         debug=True,
         angular=True,
-        name="Reaching Dockin Orientation",
+        name="Reach Dockin Orientation",
     ):
-        if rospy.has_param("~reaching_docking_orientation/timeout"):
-            timeout = rospy.get_param("~reaching_docking_orientation/timeout", timeout)
+        if rospy.has_param("~reach_docking_orientation/timeout"):
+            timeout = rospy.get_param("~reach_docking_orientation/timeout", timeout)
         else:
             timeout = rospy.get_param("~timeout", timeout)
 
-        if rospy.has_param("~reaching_docking_orientation/epsilon"):
-            epsilon = rospy.get_param("~reaching_docking_orientation/epsilon", epsilon)
+        if rospy.has_param("~reach_docking_orientation/epsilon"):
+            epsilon = rospy.get_param("~reach_docking_orientation/epsilon", epsilon)
         else:
             epsilon = rospy.get_param("~epsilon", epsilon)
 
@@ -514,16 +514,16 @@ class ReachDockingOrientation(BaseDockingState):
         debug = rospy.get_param("~debug", debug)
 
         speed_min = rospy.get_param(
-            "~reaching_docking_orientation/speed_min", speed_min
+            "~reach_docking_orientation/speed_min", speed_min
         )
         speed_max = rospy.get_param(
-            "~reaching_docking_orientation/speed_max", speed_max
+            "~reach_docking_orientation/speed_max", speed_max
         )
         angle_min = rospy.get_param(
-            "~reaching_docking_orientation/angle_min", angle_min
+            "~reach_docking_orientation/angle_min", angle_min
         )
         angle_max = rospy.get_param(
-            "~reaching_docking_orientation/angle_max", angle_max
+            "~reach_docking_orientation/angle_max", angle_max
         )
 
         super().__init__(

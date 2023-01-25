@@ -50,24 +50,24 @@ class Dock(BaseDockingState):
         battery_averaging_time=1.0,
         effort_summary_threshold=2.0,
         effort_buffer_size=10,
-        name="Docking Rover",
+        name="Dock",
     ):
-        if rospy.has_param("~docking_rover/timeout"):
-            timeout = rospy.get_param("~docking_rover/timeout", timeout)
+        if rospy.has_param("~dock/timeout"):
+            timeout = rospy.get_param("~dock/timeout", timeout)
         else:
             timeout = rospy.get_param("~timeout", timeout)
 
-        if rospy.has_param("~docking_rover/epsilon"):
-            epsilon = rospy.get_param("~docking_rover/epsilon", epsilon)
+        if rospy.has_param("~dock/epsilon"):
+            epsilon = rospy.get_param("~dock/epsilon", epsilon)
         else:
             epsilon = rospy.get_param("~epsilon", epsilon)
 
         debug = rospy.get_param("~debug", debug)
 
-        speed_min = rospy.get_param("~docking_rover/speed_min", speed_min)
-        speed_max = rospy.get_param("~docking_rover/speed_max", speed_max)
-        route_min = rospy.get_param("~docking_rover/distance_min", route_min)
-        route_max = rospy.get_param("~docking_rover/distance_max", route_max)
+        speed_min = rospy.get_param("~dock/speed_min", speed_min)
+        speed_max = rospy.get_param("~dock/speed_max", speed_max)
+        route_min = rospy.get_param("~dock/distance_min", route_min)
+        route_max = rospy.get_param("~dock/distance_max", route_max)
 
         self.buff_size = rospy.get_param("~effort_buffer_size", effort_buffer_size)
 
@@ -97,15 +97,15 @@ class Dock(BaseDockingState):
             "~effort_threshold", effort_summary_threshold
         )
 
-        self.bias_min = rospy.get_param("~docking_rover/bias_min", bias_min)
-        self.bias_max = rospy.get_param("~docking_rover/bias_max", bias_max)
+        self.bias_min = rospy.get_param("~dock/bias_min", bias_min)
+        self.bias_max = rospy.get_param("~dock/bias_max", bias_max)
         self.bias_left = 0.0
         self.bias_done = 0.0
         self.bias_speed_min = rospy.get_param(
-            "~docking_rover/bias_speed_min", bias_speed_min
+            "~dock/bias_speed_min", bias_speed_min
         )
         self.bias_speed_max = rospy.get_param(
-            "~docking_rover/bias_speed_max", bias_speed_max
+            "~dock/bias_speed_max", bias_speed_max
         )
         self.bias_direction = 0.0
 

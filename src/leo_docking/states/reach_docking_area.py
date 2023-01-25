@@ -173,7 +173,7 @@ class BaseDockAreaState(smach.State):
             ud.target_pose = target_pose
 
         ud.action_feedback.current_state = (
-            f"'Reaching Docking Area`: sequence completed. "
+            f"'Reach Docking Area`: sequence completed. "
             f"Proceeding to 'Check Area' state."
         )
         return "succeeded"
