@@ -4,7 +4,7 @@ from threading import Event
 import rospy
 import smach
 
-from aruco_opencv_msgs.msg import MarkerDetection, MarkerPose
+from aruco_opencv_msgs.msg import MarkerDetection
 
 import PyKDL
 
@@ -42,11 +42,7 @@ class CheckArea(smach.State):
             self.timeout = rospy.get_param("~timeout", timeout)
 
         self.marker_flag = Event()
-
         self.state_log_name = name
-
-        self.marker = None
-        self.marker_id = None
 
         self.reset_state()
 
@@ -56,13 +52,13 @@ class CheckArea(smach.State):
         self.marker = None
 
     def marker_callback(self, data: MarkerDetection):
-        """Function called everu time, there is new MarkerDetection message published on the topic.
+        """Function called every time there is new MarkerDetection message published on the topic.
         Saves the detected marker's position for further calculations.
         """
-        if len(data.markers) != 0:
+        if len(data.markers) != 0 and not self.marker_flag.is_set():
             for marker in data.markers:
                 if marker.marker_id == self.marker_id:
-                    self.marker: MarkerPose = data.markers[0]
+                    self.marker = data.markers[0]
                     if not self.marker_flag.is_set():
                         self.marker_flag.set()
                     break
@@ -100,23 +96,25 @@ class CheckArea(smach.State):
         )
         rospy.loginfo(f"Waiting for marker (id: {self.marker_id}) detection.")
 
-        # if desired marker is not seen
-        if not self.marker_flag.wait(self.timeout):
-            rospy.logerr(f"Marker (id: {self.marker_id}) lost. Docking failed.")
-            ud.action_result.result = (
-                f"{self.state_log_name}: Marker lost. Docking failed."
-            )
-            # if preempt request came during waiting for the marker detection
-            # it won't be handled if the marker is not seen, but the request will stay and
-            # will be handled in the next call to the state machine, so there is need to
-            # call service_preempt method here
-            super().service_preempt()
-            return "marker_lost"
+        rate = rospy.Rate(10)
+        time_start = rospy.Time.now()
+        while not self.marker_flag.is_set():
+            if self.preempt_requested():
+                self.service_preempt()
+                ud.action_result.result = f"{self.state_log_name}: state preempted."
+                return "preempted"
 
-        if self.preempt_requested():
-            self.service_preempt()
-            ud.action_result.result = f"{self.state_log_name}: state preempted."
-            return "preempted"
+            if (rospy.Time.now() - time_start).to_sec() > self.timeout:
+                rospy.logerr(f"Marker (id: {self.marker_id}) lost. Docking failed.")
+                ud.action_result.result = (
+                    f"{self.state_log_name}: Marker lost. Docking failed."
+                )
+                self.marker_sub.unregister()
+                return "marker_lost"
+
+            rate.sleep()
+
+        self.marker_sub.unregister()
 
         # calculating the length of distances needed for threshold checking
         x_dist, y_dist = calculate_threshold_distances(self.marker)
@@ -136,13 +134,11 @@ class CheckArea(smach.State):
 
         target_pose = PyKDL.Frame(PyKDL.Rotation.Quaternion(*orientation), point)
 
-        self.marker_sub.unregister()
-
         # passing calculated data to next states
         ud.target_pose = target_pose
 
         ud.action_feedback.current_state = (
             f"{self.state_log_name}: docking impossible from current position. "
-            f"Proceeding to 'Reaching Docking Area` sequence."
+            f"Proceeding to 'Reach Docking Area` sequence."
         )
         return "outside_docking_area"

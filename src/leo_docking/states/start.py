@@ -26,8 +26,6 @@ class StartState(smach.State):
 
         self.state_log_name = name
 
-        self.marker_id = None
-
         self.reset_state()
 
     def reset_state(self):
@@ -35,7 +33,7 @@ class StartState(smach.State):
         self.marker_flag.clear()
 
     def marker_callback(self, data: MarkerDetection):
-        """Function called every time, there is new MarkerDetection message published on the topic.
+        """Function called every time there is new MarkerDetection message published on the topic.
         Checks if the rover can see marker with the desired id (passed as action goal).
         """
         # if marker not seen yet and there are any markers detected
@@ -67,24 +65,23 @@ class StartState(smach.State):
             "marker_detections", MarkerDetection, self.marker_callback, queue_size=1
         )
 
-        # if desired marker is not seen
-        if not self.marker_flag.wait(self.timeout):
-            self.marker_sub.unregister()
-            rospy.logerr("Didn't find a marker. Docking failed.")
-            ud.action_result.result = (
-                f"{self.state_log_name}: didn't find a marker. Docking failed."
-            )
-            # if preempt request came during waiting for the marker detection
-            # it won't be handled if the marker is not seen, but the request will stay and
-            # will be handled in the next call to the state machine, so there is need to
-            # call service_preempt method here
-            super().service_preempt()
-            return "marker_not_found"
+        rate = rospy.Rate(10)
+        time_start = rospy.Time.now()
+        while not self.marker_flag.is_set():
+            if self.preempt_requested():
+                self.service_preempt()
+                ud.action_result.result = f"{self.state_log_name}: state preempted."
+                return "preempted"
 
-        if self.preempt_requested():
-            self.service_preempt()
-            ud.action_result.result = f"{self.state_log_name}: state preempted."
-            return "preempted"
+            if (rospy.Time.now() - time_start).to_sec() > self.timeout:
+                self.marker_sub.unregister()
+                rospy.logerr("Didn't find a marker. Docking failed.")
+                ud.action_result.result = (
+                    f"{self.state_log_name}: didn't find a marker. Docking failed."
+                )
+                return "marker_not_found"
+
+            rate.sleep()
 
         self.marker_sub.unregister()
 
