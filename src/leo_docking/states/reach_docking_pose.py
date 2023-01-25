@@ -549,5 +549,3 @@ class ReachDockingOrientation(BaseDockingState):
 
         self.movement_direction = 1.0 if angle > 0 else -1.0
         self.route_left = math.fabs(angle)
-
-

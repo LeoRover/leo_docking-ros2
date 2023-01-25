@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Optional
-from threading import Lock, Event
+from threading import Lock
 from queue import Queue
 import math
 import numpy as np
