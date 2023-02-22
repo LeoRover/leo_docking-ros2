@@ -165,12 +165,6 @@ class Dock(BaseDockingState):
 
     def movement_loop(self) -> Optional[str]:
         """Function performing rover movement; invoked in the "execute" method of the state."""
-        # self.charging = False
-        # self.battery_reference = None
-        # self.acc_data = 0.0
-        # self.counter = 0
-        # self.effort_stop = False
-        # self.effort_buf = Queue(maxsize=self.buff_size)
 
         rospy.loginfo("Waiting for motors effort and battery voltage to drop.")
         rospy.sleep(rospy.Duration(secs=2.0))
@@ -184,9 +178,7 @@ class Dock(BaseDockingState):
 
         # waiting for the end of colleting data
         rospy.loginfo("Measuring battery data...")
-        while rospy.Time.now() < self.end_time:
-            rospy.sleep(rospy.Duration(secs=0.2))
-
+        rospy.sleep(rospy.Duration(secs=self.collection_time))
         rospy.loginfo("Batery voltage average level calculated. Performing docking.")
 
         self.joint_state_sub = rospy.Subscriber(
