@@ -140,19 +140,24 @@ class BaseDockAreaState(smach.State):
             "wheel_odom_with_covariance", Odometry, self.wheel_odom_callback
         )
 
-        # waiting for odometry message
-        if not self.odom_flag.wait(self.timeout):
-            self.wheel_odom_sub.unregister()
-            rospy.logerr("Didn't get wheel odometry message. Docking failed.")
-            ud.action_result.result = (
-                f"{self.state_log_name}: wheel odometry not working. Docking failed."
-            )
-            # if preempt request came during waiting for an odometry message
-            # it won't be handled if the odometry doesn't work, but the request will stay and
-            # will be handled in the next call to the state machine, so there is need to
-            # call service_preempt method here
-            super().service_preempt()
-            return "odometry_not_working"
+        
+        rate = rospy.Rate(10)
+        time_start = rospy.Time.now()
+        while not self.odom_flag.is_set():
+            if self.preempt_requested():
+                self.service_preempt()
+                ud.action_result.result = f"{self.state_log_name}: state preempted."
+                return "preempted"
+
+            if (rospy.Time.now() - time_start).to_sec() > self.timeout:
+                rospy.logerr("Didn't get wheel odometry message. Docking failed.")
+                ud.action_result.result = (
+                    f"{self.state_log_name}: wheel odometry not working. Docking failed."
+                )
+                self.wheel_odom_sub.unregister()
+                return "odometry_not_working"
+
+            rate.sleep()
 
         self.cmd_vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
 

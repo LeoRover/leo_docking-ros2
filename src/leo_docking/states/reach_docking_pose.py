@@ -226,31 +226,32 @@ class BaseDockingState(smach.State):
             "wheel_odom_with_covariance", Odometry, self.wheel_odom_callback
         )
 
-        if not self.marker_flag.wait(self.timeout):
-            rospy.logerr(f"Marker (id: {self.marker_id}) lost. Docking failed.")
-            self.marker_sub.unregister()
-            self.wheel_odom_sub.unregister()
-            ud.action_result = f"{self.state_log_name}: Marker lost. Docking failed."
-            # if preempt request came during waiting for the marker detection
-            # it won't be handled if the marker is not seen, but the request will stay and
-            # will be handled in the next call to the state machine, so there is need to
-            # call service_preempt method here
-            super().service_preempt()
-            return "marker_lost"
+        rate = rospy.Rate(10)
+        time_start = rospy.Time.now()
+        while not self.marker_flag.is_set() or not self.odom_flag.is_set():
+            if self.preempt_requested():
+                self.service_preempt()
+                ud.action_result.result = f"{self.state_log_name}: state preempted."
+                return "preempted"
 
-        if not self.odom_flag.wait(self.timeout):
-            self.marker_sub.unregister()
-            self.wheel_odom_sub.unregister()
-            rospy.logerr("Didn't get wheel odometry message. Docking failed.")
-            ud.action_result.result = (
-                f"{self.state_log_name}: wheel odometry not working. Docking failed."
-            )
-            # if preempt request came during waiting for an odometry message
-            # it won't be handled if the odometry doesn't work, but the request will stay and
-            # will be handled in the next call to the state machine, so there is need to
-            # call service_preempt method here
-            super().service_preempt()
-            return "odometry_not_working"
+            if (rospy.Time.now() - time_start).to_sec() > self.timeout:
+                self.marker_sub.unregister()
+                self.wheel_odom_sub.unregister()
+                
+                if not self.marker_flag.is_set():
+                    rospy.logerr(f"Marker (id: {self.marker_id}) lost. Docking failed.")
+                    ud.action_result.result = (
+                        f"{self.state_log_name}: Marker lost. Docking failed."
+                    )
+                    return "marker_lost"
+                else:
+                    rospy.logerr("Didn't get wheel odometry message. Docking failed.")
+                    ud.action_result.result = (
+                        f"{self.state_log_name}: wheel odometry not working. Docking failed."
+                    )
+                    return "odometry_not_working"
+
+            rate.sleep()
 
         self.vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
 
