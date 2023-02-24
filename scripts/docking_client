@@ -27,9 +27,9 @@ if __name__ == "__main__":
     myargv = rospy.myargv(argv=sys.argv)
 
     try:
-        marker_id = int(myargv[1])
+        board_id = str(myargv[1])
     except IndexError as e:
-        marker_id = 0
+        board_id = "1"
 
     client = actionlib.SimpleActionClient(
         "leo_docking_action_server", PerformDockingAction
@@ -44,14 +44,14 @@ if __name__ == "__main__":
         exit()
 
     rospy.loginfo(f"Docking server active.")
-    goal = PerformDockingGoal(marker_id=marker_id)
+    goal = PerformDockingGoal(board_id=board_id)
 
     r = rospy.Rate(10)
     status = None
     canceled = False
 
     client.send_goal(goal, feedback_cb=feedback_callback, done_cb=done_callback)
-    rospy.loginfo(f"Sending goal: marker_id={marker_id}")
+    rospy.loginfo(f"Sending goal: board_id={board_id}")
 
     while status not in [
         GoalStatus.SUCCEEDED,

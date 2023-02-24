@@ -1,5 +1,5 @@
 # goal
-uint16 marker_id
+string board_id
 ---
 # result
 string result

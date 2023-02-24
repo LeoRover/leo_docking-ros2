@@ -5,7 +5,6 @@ from typing import Optional
 import rospy
 import smach
 
-from aruco_opencv_msgs.msg import MarkerDetection, MarkerPose
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 
@@ -13,145 +12,9 @@ import PyKDL
 
 from leo_docking.utils import (
     translate,
-    calculate_threshold_distances,
-    get_location_points_from_marker,
     angle_done_from_odom,
     distance_done_from_odom,
 )
-
-
-class CheckArea(smach.State):
-    """State responsible for checking the rover position regarding docking area
-    (area where the docking is possible) threshold, and providing the target pose,
-    when rover is outside the area."""
-
-    def __init__(
-        self,
-        outcomes=["docking_area", "outside_docking_area", "marker_lost", "preempted"],
-        input_keys=["action_goal", "action_feedback", "action_result"],
-        output_keys=["target_pose"],
-        threshold_angle=0.26,  # 15 degrees
-        docking_distance=2.0,
-        timeout=3.0,
-        name="Check Area",
-    ):
-        super().__init__(
-            outcomes=outcomes, input_keys=input_keys, output_keys=output_keys
-        )
-
-        self.threshold_angle = rospy.get_param("~threshold_angle", threshold_angle)
-        self.docking_distance = rospy.get_param("~docking_distance", docking_distance)
-
-        if rospy.has_param("~check_area/timeout"):
-            self.timeout = rospy.get_param("~check_area/timeout", timeout)
-        else:
-            self.timeout = rospy.get_param("~timeout", timeout)
-
-        self.marker_flag = Event()
-
-        self.state_log_name = name
-
-        self.marker = None
-        self.marker_id = None
-
-        self.reset_state()
-
-    def reset_state(self):
-        self.marker_id = None
-        self.marker_flag.clear()
-        self.marker = None
-
-    def marker_callback(self, data: MarkerDetection):
-        """Function called everu time, there is new MarkerDetection message published on the topic.
-        Saves the detected marker's position for further calculations.
-        """
-        if len(data.markers) != 0:
-            for marker in data.markers:
-                if marker.marker_id == self.marker_id:
-                    self.marker: MarkerPose = data.markers[0]
-                    if not self.marker_flag.is_set():
-                        self.marker_flag.set()
-                    break
-
-    def check_threshold(self, dist_x: float, dist_y: float) -> bool:
-        """Function checking if the rover is in the docking area threshold.
-
-        Args:
-            dist_x: distance of rover's projection on the marker's x axis to the marker
-            dist_y: distance of rover's position to the markers' x axis
-        Returns:
-            True if rover is in the docking area, False otherwise
-        """
-        max_value = math.tan(self.threshold_angle) * dist_x
-
-        return dist_y <= max_value
-
-    def service_preempt(self):
-        """Function called when the state catches preemption request.
-        Removes all the publishers and subscribers of the state.
-        """
-        rospy.logwarn(f"Preemption request handling for '{self.state_log_name}' state.")
-        self.marker_sub.unregister()
-        return super().service_preempt()
-
-    def execute(self, ud):
-        """Main state method invoked on state entered.
-        Checks rover position and eventually calculates target pose of the rover.
-        """
-        self.reset_state()
-
-        self.marker_id = ud.action_goal.marker_id
-        self.marker_sub = rospy.Subscriber(
-            "marker_detections", MarkerDetection, self.marker_callback, queue_size=1
-        )
-        rospy.loginfo(f"Waiting for marker (id: {self.marker_id}) detection.")
-
-        # if desired marker is not seen
-        if not self.marker_flag.wait(self.timeout):
-            rospy.logerr(f"Marker (id: {self.marker_id}) lost. Docking failed.")
-            ud.action_result.result = (
-                f"{self.state_log_name}: Marker lost. Docking failed."
-            )
-            # if preempt request came during waiting for the marker detection
-            # it won't be handled if the marker is not seen, but the request will stay and
-            # will be handled in the next call to the state machine, so there is need to
-            # call service_preempt method here
-            super().service_preempt()
-            return "marker_lost"
-
-        if self.preempt_requested():
-            self.service_preempt()
-            ud.action_result.result = f"{self.state_log_name}: state preempted."
-            return "preempted"
-
-        # calculating the length of distances needed for threshold checking
-        x_dist, y_dist = calculate_threshold_distances(self.marker)
-
-        if self.check_threshold(x_dist, y_dist):
-            self.marker_sub.unregister()
-            ud.action_feedback.current_state = (
-                f"{self.state_log_name}: docking possible from current position. "
-                f"Proceeding to 'Reaching Docking Point` sequence."
-            )
-            return "docking_area"
-
-        # getting target pose
-        point, orientation = get_location_points_from_marker(
-            self.marker, self.docking_distance
-        )
-
-        target_pose = PyKDL.Frame(PyKDL.Rotation.Quaternion(*orientation), point)
-
-        self.marker_sub.unregister()
-
-        # passing calculated data to next states
-        ud.target_pose = target_pose
-
-        ud.action_feedback.current_state = (
-            f"{self.state_log_name}: docking impossible from current position. "
-            f"Proceeding to 'Reaching Docking Area` sequence."
-        )
-        return "outside_docking_area"
 
 
 class BaseDockAreaState(smach.State):
@@ -277,19 +140,24 @@ class BaseDockAreaState(smach.State):
             "wheel_odom_with_covariance", Odometry, self.wheel_odom_callback
         )
 
-        # waiting for odometry message
-        if not self.odom_flag.wait(self.timeout):
-            self.wheel_odom_sub.unregister()
-            rospy.logerr("Didn't get wheel odometry message. Docking failed.")
-            ud.action_result.result = (
-                f"{self.state_log_name}: wheel odometry not working. Docking failed."
-            )
-            # if preempt request came during waiting for an odometry message
-            # it won't be handled if the odometry doesn't work, but the request will stay and
-            # will be handled in the next call to the state machine, so there is need to
-            # call service_preempt method here
-            super().service_preempt()
-            return "odometry_not_working"
+        
+        rate = rospy.Rate(10)
+        time_start = rospy.Time.now()
+        while not self.odom_flag.is_set():
+            if self.preempt_requested():
+                self.service_preempt()
+                ud.action_result.result = f"{self.state_log_name}: state preempted."
+                return "preempted"
+
+            if (rospy.Time.now() - time_start).to_sec() > self.timeout:
+                rospy.logerr("Didn't get wheel odometry message. Docking failed.")
+                ud.action_result.result = (
+                    f"{self.state_log_name}: wheel odometry not working. Docking failed."
+                )
+                self.wheel_odom_sub.unregister()
+                return "odometry_not_working"
+
+            rate.sleep()
 
         self.cmd_vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
 
@@ -310,7 +178,7 @@ class BaseDockAreaState(smach.State):
             ud.target_pose = target_pose
 
         ud.action_feedback.current_state = (
-            f"'Reaching Docking Area`: sequence completed. "
+            f"'Reach Docking Area`: sequence completed. "
             f"Proceeding to 'Check Area' state."
         )
         return "succeeded"
@@ -437,9 +305,9 @@ class RideToDockArea(BaseDockAreaState):
         return route_left
 
 
-class RotateToMarker(BaseDockAreaState):
+class RotateToBoard(BaseDockAreaState):
     """The third state of the sequence state machine getting rover to docking area;
-    responsible for rotating the rover toward marker on the docking base"""
+    responsible for rotating the rover toward board on the docking base"""
 
     def __init__(
         self,
@@ -451,22 +319,22 @@ class RotateToMarker(BaseDockAreaState):
         angle_max=1.05,
         epsilon=0.1,
         angle=True,
-        name="Rotate Towards Marker",
+        name="Rotate Towards Board",
     ):
-        if rospy.has_param("~rotate_to_marker/timeout"):
-            timeout = rospy.get_param("~rotate_to_marker/timeout", timeout)
+        if rospy.has_param("~rotate_to_board/timeout"):
+            timeout = rospy.get_param("~rotate_to_board/timeout", timeout)
         else:
             timeout = rospy.get_param("~timeout", timeout)
 
-        if rospy.has_param("~rotate_to_marker/epsilon"):
-            epsilon = rospy.get_param("~rotate_to_marker/epsilon", epsilon)
+        if rospy.has_param("~rotate_to_board/epsilon"):
+            epsilon = rospy.get_param("~rotate_to_board/epsilon", epsilon)
         else:
             epsilon = rospy.get_param("~epsilon", epsilon)
 
-        speed_min = rospy.get_param("~rotate_to_marker/speed_min", speed_min)
-        speed_max = rospy.get_param("~rotate_to_marker/speed_max", speed_max)
-        angle_min = rospy.get_param("~rotate_to_marker/angle_min", angle_min)
-        angle_max = rospy.get_param("~rotate_to_marker/angle_max", angle_max)
+        speed_min = rospy.get_param("~rotate_to_board/speed_min", speed_min)
+        speed_max = rospy.get_param("~rotate_to_board/speed_max", speed_max)
+        angle_min = rospy.get_param("~rotate_to_board/angle_min", angle_min)
+        angle_max = rospy.get_param("~rotate_to_board/angle_max", angle_max)
 
         super().__init__(
             output_keys=output_keys,
@@ -484,7 +352,7 @@ class RotateToMarker(BaseDockAreaState):
         position: PyKDL.Vector = target_pose.p
         # calculating rotation done in the first state of sequence
         angle_done = math.atan2(position.y(), position.x())
-        # rotating target pose by -angle, so the target orientation is looking at marker again
+        # rotating target pose by -angle, so the target orientation is looking at board again
         # (initial target pose is in the `base_link` frame)
         target_pose.M.DoRotZ(-angle_done)
         route_left = target_pose.M.GetRPY()[2]
