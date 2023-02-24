@@ -18,6 +18,13 @@ catkin_package(
     message_runtime
 )
 
+install(
+  DIRECTORY
+    config
+    launch
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)
+
 catkin_install_python(
   PROGRAMS
   scripts/docking_main
