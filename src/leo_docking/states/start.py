@@ -40,7 +40,7 @@ class StartState(smach.State):
         if len(data.boards) != 0 and not self.board_flag.is_set():
             # look for the desired board
             for board in data.boards:
-                if board.name == self.board_id:
+                if board.board_name == self.board_id:
                     self.board_flag.set()
                     break
 
@@ -62,7 +62,7 @@ class StartState(smach.State):
         )
 
         self.board_sub = rospy.Subscriber(
-            "board_detections", ArucoDetection, self.board_callback, queue_size=1
+            "aruco_detections", ArucoDetection, self.board_callback, queue_size=1
         )
 
         rate = rospy.Rate(10)

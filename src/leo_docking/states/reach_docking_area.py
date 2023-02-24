@@ -305,9 +305,9 @@ class RideToDockArea(BaseDockAreaState):
         return route_left
 
 
-class RotateToMarker(BaseDockAreaState):
+class RotateToBoard(BaseDockAreaState):
     """The third state of the sequence state machine getting rover to docking area;
-    responsible for rotating the rover toward marker on the docking base"""
+    responsible for rotating the rover toward board on the docking base"""
 
     def __init__(
         self,
@@ -319,22 +319,22 @@ class RotateToMarker(BaseDockAreaState):
         angle_max=1.05,
         epsilon=0.1,
         angle=True,
-        name="Rotate Towards Marker",
+        name="Rotate Towards Board",
     ):
-        if rospy.has_param("~rotate_to_marker/timeout"):
-            timeout = rospy.get_param("~rotate_to_marker/timeout", timeout)
+        if rospy.has_param("~rotate_to_board/timeout"):
+            timeout = rospy.get_param("~rotate_to_board/timeout", timeout)
         else:
             timeout = rospy.get_param("~timeout", timeout)
 
-        if rospy.has_param("~rotate_to_marker/epsilon"):
-            epsilon = rospy.get_param("~rotate_to_marker/epsilon", epsilon)
+        if rospy.has_param("~rotate_to_board/epsilon"):
+            epsilon = rospy.get_param("~rotate_to_board/epsilon", epsilon)
         else:
             epsilon = rospy.get_param("~epsilon", epsilon)
 
-        speed_min = rospy.get_param("~rotate_to_marker/speed_min", speed_min)
-        speed_max = rospy.get_param("~rotate_to_marker/speed_max", speed_max)
-        angle_min = rospy.get_param("~rotate_to_marker/angle_min", angle_min)
-        angle_max = rospy.get_param("~rotate_to_marker/angle_max", angle_max)
+        speed_min = rospy.get_param("~rotate_to_board/speed_min", speed_min)
+        speed_max = rospy.get_param("~rotate_to_board/speed_max", speed_max)
+        angle_min = rospy.get_param("~rotate_to_board/angle_min", angle_min)
+        angle_max = rospy.get_param("~rotate_to_board/angle_max", angle_max)
 
         super().__init__(
             output_keys=output_keys,
@@ -352,7 +352,7 @@ class RotateToMarker(BaseDockAreaState):
         position: PyKDL.Vector = target_pose.p
         # calculating rotation done in the first state of sequence
         angle_done = math.atan2(position.y(), position.x())
-        # rotating target pose by -angle, so the target orientation is looking at marker again
+        # rotating target pose by -angle, so the target orientation is looking at board again
         # (initial target pose is in the `base_link` frame)
         target_pose.M.DoRotZ(-angle_done)
         route_left = target_pose.M.GetRPY()[2]

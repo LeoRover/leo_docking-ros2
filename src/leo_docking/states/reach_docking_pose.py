@@ -7,19 +7,19 @@ import rospy
 import tf2_ros
 import smach
 
-from aruco_opencv_msgs.msg import MarkerDetection, MarkerPose
+from aruco_opencv_msgs.msg import ArucoDetection, BoardPose
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 
 import PyKDL
 
 from leo_docking.utils import (
-    get_location_points_from_marker,
+    get_location_points_from_board,
     angle_done_from_odom,
     distance_done_from_odom,
     visualize_position,
     translate,
-    normalize_marker,
+    normalize_board,
 )
 
 
@@ -29,7 +29,7 @@ class BaseDockingState(smach.State):
 
     def __init__(
         self,
-        outcomes=["succeeded", "odometry_not_working", "marker_lost", "preempted"],
+        outcomes=["succeeded", "odometry_not_working", "board_lost", "preempted"],
         input_keys=["action_goal", "action_feedback", "action_result"],
         timeout=3.0,
         speed_min=0.1,
@@ -51,7 +51,7 @@ class BaseDockingState(smach.State):
         self.epsilon = epsilon
         self.docking_point_distance = docking_point_distance
 
-        self.marker_flag: Event = Event()
+        self.board_flag: Event = Event()
         self.odom_flag: Event = Event()
         self.route_lock: Lock = Lock()
         self.odom_lock: Lock = Lock()
@@ -64,7 +64,7 @@ class BaseDockingState(smach.State):
         self.movement_direction = 0.0
         self.angle = angle
 
-        self.marker_id = None
+        self.board_id = None
 
         self.state_log_name = name
 
@@ -76,7 +76,7 @@ class BaseDockingState(smach.State):
         self.reset_state()
 
     def reset_state(self):
-        self.marker_flag.clear()
+        self.board_flag.clear()
         self.odom_flag.clear()
         self.odom_reference = None
         self.current_odom = None
@@ -85,17 +85,17 @@ class BaseDockingState(smach.State):
         self.route_done = -1.0
         self.movement_direction = 0.0
 
-        self.marker_id = None
+        self.board_id = None
 
         self.seq = 0
 
-    def calculate_route_left(self, marker: MarkerPose) -> None:
+    def calculate_route_left(self, board: BoardPose) -> None:
         """Function calculating route left (either angle left to target or linear distance)
-        from the docking pose calculated from the current marker detection.
+        from the docking pose calculated from the current board detection.
         Saves the calculation result in a class variable "route_left".
 
         Args:
-            marker: (MarkerPose) the current detected pose of the marker
+            board: (BoardPose) the current detected pose of the board
         """
         raise NotImplementedError()
 
@@ -136,11 +136,11 @@ class BaseDockingState(smach.State):
         self, odom_reference: Odometry, current_odom: Odometry
     ) -> None:
         """Function calculating route done (either angle, or distance) from the odometry message
-        saved in marker callback (odom_reference), to the current position.
+        saved in board callback (odom_reference), to the current position.
         Saves the calculated route in a class variable "route_done".
 
         Args:
-            odom_reference: the odometry message saved as reference position in marker callback
+            odom_reference: the odometry message saved as reference position in board callback
             current_odom: the newest odometry message received by the state (current position)
         """
         if self.angle:
@@ -148,26 +148,26 @@ class BaseDockingState(smach.State):
         else:
             self.route_done = distance_done_from_odom(odom_reference, current_odom)
 
-    def marker_callback(self, data: MarkerDetection) -> None:
-        """Function called every time, there is new MarkerDetection message published on the topic.
-        Calculates the route left from the detected marker, set's odometry reference, and
+    def board_callback(self, data: ArucoDetection) -> None:
+        """Function called every time, there is new ArucoDetection message published on the topic.
+        Calculates the route left from the detected board, set's odometry reference, and
         (if specified), sends debug tf's so you can visualize calculated target position in rviz.
         """
-        if len(data.markers) == 0:
+        if len(data.boards) == 0:
             return
 
-        marker: MarkerPose
-        for marker in data.markers:
-            if marker.marker_id == self.marker_id:
-                if not self.marker_flag.is_set():
-                    self.marker_flag.set()
+        board: BoardPose
+        for board in data.boards:
+            if board.board_name == self.board_id:
+                if not self.board_flag.is_set():
+                    self.board_flag.set()
 
                 if self.debug:
                     (
                         docking_point,
                         docking_orientation,
-                    ) = get_location_points_from_marker(
-                        marker, distance=self.docking_point_distance
+                    ) = get_location_points_from_board(
+                        board, distance=self.docking_point_distance
                     )
                     visualize_position(
                         docking_point,
@@ -178,12 +178,12 @@ class BaseDockingState(smach.State):
                         self.tf_broadcaster,
                     )
 
-                    marker_normalized = normalize_marker(marker)
+                    board_normalized = normalize_board(board)
                     visualize_position(
-                        marker_normalized.p,
-                        marker_normalized.M.GetQuaternion(),
+                        board_normalized.p,
+                        board_normalized.M.GetQuaternion(),
                         "base_link",
-                        "normalized_marker",
+                        "normalized_board",
                         self.seq,
                         self.tf_broadcaster,
                     )
@@ -191,7 +191,7 @@ class BaseDockingState(smach.State):
                     self.seq += 1
 
                 with self.route_lock:
-                    self.calculate_route_left(marker)
+                    self.calculate_route_left(board)
 
                 with self.odom_lock:
                     self.odom_reference = self.current_odom
@@ -200,7 +200,7 @@ class BaseDockingState(smach.State):
 
     def wheel_odom_callback(self, data: Odometry) -> None:
         """Function called every time, there is new Odometry message published on the topic.
-        Calculates the route done from the referance message saved in marker callback,
+        Calculates the route done from the referance message saved in board callback,
         and the current odometry pose.
         """
         if not self.odom_flag.is_set():
@@ -216,10 +216,10 @@ class BaseDockingState(smach.State):
         """Main state method, executed automatically on state entered"""
         self.reset_state()
 
-        self.marker_id = ud.action_goal.marker_id
+        self.board_id = ud.action_goal.board_id
 
-        self.marker_sub = rospy.Subscriber(
-            "marker_detections", MarkerDetection, self.marker_callback, queue_size=1
+        self.board_sub = rospy.Subscriber(
+            "aruco_detections", ArucoDetection, self.board_callback, queue_size=1
         )
 
         self.wheel_odom_sub = rospy.Subscriber(
@@ -228,22 +228,22 @@ class BaseDockingState(smach.State):
 
         rate = rospy.Rate(10)
         time_start = rospy.Time.now()
-        while not self.marker_flag.is_set() or not self.odom_flag.is_set():
+        while not self.board_flag.is_set() or not self.odom_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
                 ud.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
 
             if (rospy.Time.now() - time_start).to_sec() > self.timeout:
-                self.marker_sub.unregister()
+                self.board_sub.unregister()
                 self.wheel_odom_sub.unregister()
                 
-                if not self.marker_flag.is_set():
-                    rospy.logerr(f"Marker (id: {self.marker_id}) lost. Docking failed.")
+                if not self.board_flag.is_set():
+                    rospy.logerr(f"Board (id: {self.board_id}) lost. Docking failed.")
                     ud.action_result.result = (
-                        f"{self.state_log_name}: Marker lost. Docking failed."
+                        f"{self.state_log_name}: Board lost. Docking failed."
                     )
-                    return "marker_lost"
+                    return "board_lost"
                 else:
                     rospy.logerr("Didn't get wheel odometry message. Docking failed.")
                     ud.action_result.result = (
@@ -261,7 +261,7 @@ class BaseDockingState(smach.State):
             return "preempted"
 
         self.wheel_odom_sub.unregister()
-        self.marker_sub.unregister()
+        self.board_sub.unregister()
         self.vel_pub.unregister()
 
         ud.action_feedback.current_state = (
@@ -280,7 +280,7 @@ class BaseDockingState(smach.State):
         self.vel_pub.publish(Twist())
         self.vel_pub.unregister()
         self.wheel_odom_sub.unregister()
-        self.marker_sub.unregister()
+        self.board_sub.unregister()
         return super().service_preempt()
 
 
@@ -336,9 +336,9 @@ class RotateToDockingPoint(BaseDockingState):
             name=name,
         )
 
-    def calculate_route_left(self, marker: MarkerPose):
-        docking_point, _ = get_location_points_from_marker(
-            marker, distance=self.docking_point_distance
+    def calculate_route_left(self, board: BoardPose):
+        docking_point, _ = get_location_points_from_board(
+            board, distance=self.docking_point_distance
         )
 
         if math.sqrt(docking_point.y() ** 2 + docking_point.x() ** 2) < 0.1:
@@ -462,9 +462,9 @@ class ReachDockingPoint(BaseDockingState):
         self.vel_pub.publish(Twist())
         return None
 
-    def calculate_route_left(self, marker: MarkerPose):
-        docking_point, _ = get_location_points_from_marker(
-            marker, distance=self.docking_point_distance
+    def calculate_route_left(self, board: BoardPose):
+        docking_point, _ = get_location_points_from_board(
+            board, distance=self.docking_point_distance
         )
 
         self.route_left = math.sqrt(docking_point.x() ** 2 + docking_point.y() ** 2)
@@ -482,7 +482,7 @@ class ReachDockingPoint(BaseDockingState):
 
 class ReachDockingOrientation(BaseDockingState):
     """The third state of the sequence state machine getting rover to docking position;
-    responsible for rotating the rover toward marker on the docking base - a position where the
+    responsible for rotating the rover toward board on the docking base - a position where the
     rover needs just to drive forward to reach the base.
     """
 
@@ -540,9 +540,9 @@ class ReachDockingOrientation(BaseDockingState):
             name=name,
         )
 
-    def calculate_route_left(self, marker: MarkerPose):
-        _, docking_orientation = get_location_points_from_marker(
-            marker, distance=self.docking_point_distance
+    def calculate_route_left(self, board: BoardPose):
+        _, docking_orientation = get_location_points_from_board(
+            board, distance=self.docking_point_distance
         )
 
         rot = PyKDL.Rotation.Quaternion(*docking_orientation)

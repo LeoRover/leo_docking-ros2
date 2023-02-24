@@ -7,7 +7,7 @@ import numpy as np
 
 import rospy
 
-from aruco_opencv_msgs.msg import MarkerPose
+from aruco_opencv_msgs.msg import BoardPose
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float32
@@ -18,7 +18,7 @@ from leo_docking.utils import (
     angle_done_from_odom,
     distance_done_from_odom,
     translate,
-    normalize_marker,
+    normalize_board,
 )
 from .reach_docking_pose import BaseDockingState
 
@@ -26,7 +26,7 @@ from .reach_docking_pose import BaseDockingState
 class Dock(BaseDockingState):
     """State performing final phase of the docking - reaching the base.
     Drives the rover forward unitl one of three condition is satisfied:
-    - rover is close enough to the marker located on the docking base
+    - rover is close enough to the board located on the docking base
     - the voltage on the topic with battery data is higher than the average collected before docking
     (if the average was low enough at the beggining)
     - the effort on the wheel motors is high enough - the rover is pushing against the base
@@ -205,7 +205,7 @@ class Dock(BaseDockingState):
             with self.route_lock:
                 if self.route_done + self.epsilon >= self.route_left:
                     rospy.loginfo(
-                        f"Docking stopped. Condition: distance to marker reached."
+                        f"Docking stopped. Condition: distance to board reached."
                     )
                     break
 
@@ -237,15 +237,15 @@ class Dock(BaseDockingState):
         self.joint_state_sub.unregister()
         return None
 
-    def calculate_route_left(self, marker: MarkerPose) -> None:
-        normalized_marker = normalize_marker(marker)
+    def calculate_route_left(self, board: BoardPose) -> None:
+        normalized_board = normalize_board(board)
         self.route_left = math.sqrt(
-            normalized_marker.p.x() ** 2 + normalized_marker.p.y() ** 2
+            normalized_board.p.x() ** 2 + normalized_board.p.y() ** 2
         )
 
         # calculating the correction for the docking point
-        dock_bias = math.atan2(normalized_marker.p.y(), normalized_marker.p.x())
-        self.movement_direction = 1.0 if normalized_marker.p.x() >= 0.0 else -1.0
+        dock_bias = math.atan2(normalized_board.p.y(), normalized_board.p.x())
+        self.movement_direction = 1.0 if normalized_board.p.x() >= 0.0 else -1.0
         self.bias_direction = 1.0 if dock_bias > 0.0 else -1.0
         self.bias_left = math.fabs(dock_bias)
 
@@ -255,7 +255,7 @@ class Dock(BaseDockingState):
 
     def service_preempt(self):
         self.wheel_odom_sub.unregister()
-        self.marker_sub.unregister()
+        self.board_sub.unregister()
         self.battery_sub.unregister()
         self.joint_state_sub.unregister()
         return super().service_preempt()

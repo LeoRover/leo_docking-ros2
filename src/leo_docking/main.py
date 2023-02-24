@@ -10,7 +10,7 @@ from leo_docking.states import (
     StartState,
     CheckArea,
     RideToDockArea,
-    RotateToMarker,
+    RotateToBoard,
     RotateToDockArea,
     ReachDockingPoint,
     RotateToDockingPoint,
@@ -30,8 +30,8 @@ def create_state_machine() -> smach.StateMachine:
             "Start",
             StartState(timeout=5.0),
             transitions={
-                "marker_not_found": "DOCKING FAILED",
-                "marker_found": "Check Area",
+                "board_not_found": "DOCKING FAILED",
+                "board_found": "Check Area",
                 "preempted": "DOCKING PREEMPTED",
             },
             remapping={
@@ -45,14 +45,14 @@ def create_state_machine() -> smach.StateMachine:
             "Check Area",
             CheckArea(timeout=5, threshold_angle=0.17),
             transitions={
-                "marker_lost": "DOCKING FAILED",
+                "board_lost": "DOCKING FAILED",
                 "docking_area": "Reach Docking Point",
                 "outside_docking_area": "Reach Docking Area",
                 "preempted": "DOCKING PREEMPTED",
             },
             remapping={
                 "target_pose": "docking_area_data",
-                "marker_id": "action_goal",
+                "board_id": "action_goal",
                 "action_feedback": "action_feedback",
                 "action_result": "action_result",
             },
@@ -84,8 +84,8 @@ def create_state_machine() -> smach.StateMachine:
                 },
             )
             smach.Sequence.add(
-                "Rotate To Marker",
-                RotateToMarker(timeout=2.0),
+                "Rotate To Board",
+                RotateToBoard(timeout=2.0),
                 remapping={
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
@@ -109,7 +109,7 @@ def create_state_machine() -> smach.StateMachine:
         )
 
         reach_docking_pose = smach.Sequence(
-            outcomes=["succeeded", "odometry_not_working", "marker_lost", "preempted"],
+            outcomes=["succeeded", "odometry_not_working", "board_lost", "preempted"],
             connector_outcome="succeeded",
             input_keys=["action_goal", "action_feedback", "action_result"],
         )
@@ -136,7 +136,7 @@ def create_state_machine() -> smach.StateMachine:
             transitions={
                 "succeeded": "Dock",
                 "odometry_not_working": "DOCKING FAILED",
-                "marker_lost": "DOCKING FAILED",
+                "board_lost": "DOCKING FAILED",
                 "preempted": "DOCKING PREEMPTED",
             },
             remapping={
@@ -152,7 +152,7 @@ def create_state_machine() -> smach.StateMachine:
             transitions={
                 "succeeded": "ROVER DOCKED",
                 "odometry_not_working": "DOCKING FAILED",
-                "marker_lost": "DOCKING FAILED",
+                "board_lost": "DOCKING FAILED",
                 "preempted": "DOCKING PREEMPTED",
             },
             remapping={

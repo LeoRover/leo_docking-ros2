@@ -7,7 +7,7 @@ import tf2_ros
 import rospy
 
 from geometry_msgs.msg import TransformStamped, Pose
-from aruco_opencv_msgs.msg import MarkerPose
+from aruco_opencv_msgs.msg import BoardPose
 from nav_msgs.msg import Odometry
 
 import PyKDL
@@ -65,45 +65,45 @@ def pose_to_frame(pose: Pose) -> PyKDL.Frame:
     return out_frame
 
 
-def normalize_marker(marker: MarkerPose) -> PyKDL.Frame:
-    """Function normalizig pose of detected marker in base_link frame:
-    - position: puts marker on level z = 0.0.
-    - orientation: calculates marker's yaw from unit vector z (vector looking in z axis) in respect
-                   to marker with arctangent, and normalizes the orientation - makes marker have
+def normalize_board(board: BoardPose) -> PyKDL.Frame:
+    """Function normalizig pose of detected board in base_link frame:
+    - position: puts board on level z = 0.0.
+    - orientation: calculates board's yaw from unit vector z (vector looking in z axis) in respect
+                   to board with arctangent, and normalizes the orientation - makes board have
                    x,y,z axis in the same scheme as rover has (x, y, z - forward, left, up).
 
     Args:
-        marker: pose of detected marker used for localization of docking station
+        board: pose of detected board used for localization of docking station
 
     Returns:
-        normalized_marker: normalized marker position in base_link frame
+        normalized_board: normalized board position in base_link frame
     """
 
-    # converting pose to frame, and placing marker on z=0.0
-    base_marker = pose_to_frame(marker.pose)
+    # converting pose to frame, and placing board on z=0.0
+    base_board = pose_to_frame(board.pose)
 
-    # calculating marker's yaw
-    unit_z = base_marker.M.UnitZ()
+    # calculating board's yaw
+    unit_z = base_board.M.UnitZ()
     angle = math.atan2(unit_z.y(), unit_z.x())
 
-    # making normalized orientation - rotating base orientation in z axis by marker's yaw
+    # making normalized orientation - rotating base orientation in z axis by board's yaw
     rot = PyKDL.Rotation.RotZ(angle)
 
     # making final frame
-    normalized_marker = PyKDL.Frame(rot, base_marker.p)
+    normalized_board = PyKDL.Frame(rot, base_board.p)
 
-    return normalized_marker
+    return normalized_board
 
 
-def get_location_points_from_marker(
-    marker: MarkerPose, distance: float = 0.0
+def get_location_points_from_board(
+    board: BoardPose, distance: float = 0.0
 ) -> Tuple[PyKDL.Vector, Tuple[float, float, float, float]]:
-    """Function calculating from detected marker a pose and orientation that rover should have
+    """Function calculating from detected board a pose and orientation that rover should have
     before riding on the docking station.
 
     Args:
-        marker: pose of the marker used for calculating the final pose and orientation
-        distance: distance (in meters) of the desired position from the marker on the docking
+        board: pose of the board used for calculating the final pose and orientation
+        distance: distance (in meters) of the desired position from the board on the docking
                   station
 
     Returns:
@@ -112,15 +112,15 @@ def get_location_points_from_marker(
         docking_orientation: target orientation of the rover before reaching docking station; tuple
                              representing quaternion (x, y, z, w)
     """
-    marker_frame = normalize_marker(marker)
+    board_frame = normalize_board(board)
 
-    # getting docking point - rotating vector (distance, 0, 0) by marker orientation
+    # getting docking point - rotating vector (distance, 0, 0) by board orientation
     docking_point_base = PyKDL.Vector(distance, 0.0, 0.0)
-    # no need of projection to z=0.0 beceause we use normalized marker which is already on z=0.0
-    docking_point = marker_frame * docking_point_base
+    # no need of projection to z=0.0 beceause we use normalized board which is already on z=0.0
+    docking_point = board_frame * docking_point_base
 
     # target orientation
-    angle, *_ = marker_frame.M.GetEulerZYX()
+    angle, *_ = board_frame.M.GetEulerZYX()
     docking_orientation = PyKDL.Rotation.RotZ(angle + math.pi).GetQuaternion()
 
     return (docking_point, docking_orientation)
@@ -262,24 +262,24 @@ def translate(value, left_min, left_max, right_min, right_max) -> float:
     return ans
 
 
-def calculate_threshold_distances(marker: MarkerPose) -> Tuple[float, float]:
-    """Function calculating the distance from rover to marker sight
-    (x axis of the marker frame) and how far on the marker's x axis the rover is.
+def calculate_threshold_distances(board: BoardPose) -> Tuple[float, float]:
+    """Function calculating the distance from rover to board sight
+    (x axis of the board frame) and how far on the board's x axis the rover is.
     which are needed for the area threshold checking.
 
     Args:
-        marker: marker position in base_link frame
+        board: board position in base_link frame
     returns:
-        x_dist: distance from marker to the rover's position projected on marker's x axis
-        y_dist: distance from rover to the marker sight (x axis of the marker)
+        x_dist: distance from board to the rover's position projected on board's x axis
+        y_dist: distance from rover to the board sight (x axis of the board)
     """
-    normalized_marker = normalize_marker(marker)
+    normalized_board = normalize_board(board)
 
-    unit_vec_x = normalized_marker.M.UnitX()
+    unit_vec_x = normalized_board.M.UnitX()
 
-    position = normalized_marker.p
+    position = normalized_board.p
 
-    # getting equation for the line going through marker and unit_vec_x (from marker's perspective)
+    # getting equation for the line going through board and unit_vec_x (from board's perspective)
     coeff_a = (position.y() - unit_vec_x[1]) / (position.x() - unit_vec_x[0])
     coeff_b = position.y() - coeff_a * position.x()
 
