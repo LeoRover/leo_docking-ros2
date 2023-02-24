@@ -37,13 +37,13 @@ ride_to_dock_area/distance_max: 0.5  # distance left (in meters) for which the r
 # ride_to_dock_area/timeout: 3.0     # specific timeout for "RideToDockArea" state blocking events
 
 
-# ------------------------------------------ ROTATE TO MARKER PARAMS ------------------------------
-rotate_to_marker/speed_min: 0.1     # minimal angular speed
-rotate_to_marker/speed_max: 0.4     # maximum angular speed
-rotate_to_marker/angle_min: 0.05    # the angle (in radians) left for which the rover will move with the minimal speed
-rotate_to_marker/angle_max: 1.05    # the angle (in radians) left for which the rover will move with the maximum speed
-# rotate_to_marker/epsilon: 0.1     # specific epsilon for "RotateToDockMarker" state calculations
-# rotate_to_marker/timeout: 3.0     # specific timeout for "RotateToDockMarker" state blocking events
+# ------------------------------------------ ROTATE TO BOARD PARAMS ------------------------------
+rotate_to_board/speed_min: 0.1     # minimal angular speed
+rotate_to_board/speed_max: 0.4     # maximum angular speed
+rotate_to_board/angle_min: 0.05    # the angle (in radians) left for which the rover will move with the minimal speed
+rotate_to_board/angle_max: 1.05    # the angle (in radians) left for which the rover will move with the maximum speed
+# rotate_to_board/epsilon: 0.1     # specific epsilon for "RotateToBoard" state calculations
+# rotate_to_board/timeout: 3.0     # specific timeout for "RotateToDockBoard" state blocking events
 
 
 # ------------------------------------- ROTATE TO DOCKING POINT PARAMS ----------------------------
