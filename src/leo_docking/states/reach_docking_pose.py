@@ -228,6 +228,8 @@ class BaseDockingState(smach.State):
 
         rate = rospy.Rate(10)
         time_start = rospy.Time.now()
+        self.vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
+        
         while not self.board_flag.is_set() or not self.odom_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
@@ -252,8 +254,6 @@ class BaseDockingState(smach.State):
                     return "odometry_not_working"
 
             rate.sleep()
-
-        self.vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
 
         outcome = self.movement_loop()
         if outcome:
