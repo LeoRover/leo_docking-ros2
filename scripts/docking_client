@@ -31,12 +31,22 @@ if __name__ == "__main__":
     except IndexError as e:
         board_id = "1"
 
+    try:
+        timeout = float(myargv[2])
+    except IndexError as e:
+        timeout = 3.0
+
+    try:
+        check_interval = float(myargv[3])
+    except IndexError as e:
+        check_interval = 2.0
+
     client = actionlib.SimpleActionClient(
         "leo_docking_action_server", PerformDockingAction
     )
 
     rospy.loginfo(f"Waiting for 'leo_docking_action_server' server.")
-    server_up = client.wait_for_server(rospy.Duration(secs=3.0))
+    server_up = client.wait_for_server(rospy.Duration(secs=timeout))
 
     if not server_up:
         rospy.logerr(f"Server 'leo_docking_action_server' not active.")
@@ -46,25 +56,30 @@ if __name__ == "__main__":
     rospy.loginfo(f"Docking server active.")
     goal = PerformDockingGoal(board_id=board_id)
 
-    r = rospy.Rate(10)
+    rate = rospy.Rate(10)
     status = None
-    canceled = False
 
     client.send_goal(goal, feedback_cb=feedback_callback, done_cb=done_callback)
     rospy.loginfo(f"Sending goal: board_id={board_id}")
 
-    while status not in [
+    last_check_time = rospy.Time.now()
+
+    while server_up and status not in [
         GoalStatus.SUCCEEDED,
         GoalStatus.ABORTED,
         GoalStatus.PREEMPTED,
     ]:
         try:
+            if (rospy.Time.now() - last_check_time).to_sec() > check_interval:
+                server_up = client.wait_for_server(rospy.Duration(secs=timeout))
+                last_check_time = rospy.Time.now()
             status = client.get_state()
-            r.sleep()
+            rate.sleep()
         except KeyboardInterrupt as e:
-            if not canceled:
-                rospy.logwarn(f"Cought Ctrl+C. Canceling docking.")
-                client.cancel_goal()
-                canceled = True
+            rospy.logwarn(f"Caught Ctrl+C. Canceling docking.")
+            client.cancel_goal()
+    
+    if not server_up:
+        rospy.logerr(f"Docking Server stopped responding!")
 
     rospy.signal_shutdown(f"Docking finished.")
