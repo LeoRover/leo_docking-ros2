@@ -8,6 +8,7 @@ max_battery_average: 11.0     # maximum battery voltage average at the start of 
 battery_averaging_time: 1.0   # time over which the average battery voltage will be calculated
 effort_threshold: 2.0         # summarized effort threshold to consider the rover moving in place - getting blocked on the base
 effort_buffer_size: 10        # size of wheel motor efforts buffer - average of the sums is considered in comparison with effort threshold
+motor_cd_time: 2.0            # time for effort on motors to drop down
 
 # -------------------------------------------- START STATE PARAMS ---------------------------------
 # start_state/timeout: 3.0  # specific timeout for "StartState" state blocking events
@@ -47,18 +48,19 @@ rotate_to_board/angle_max: 1.05    # the angle (in radians) left for which the r
 
 
 # ------------------------------------- ROTATE TO DOCKING POINT PARAMS ----------------------------
-rotate_to_docking_point/speed_min:  0.1    # minimal angular speed
-rotate_to_docking_point/speed_max:  0.4    # maximum angular speed
-rotate_to_docking_point/angle_min:  0.05   # the angle (in radians) left for which the rover will move with the minimal speed
-rotate_to_docking_point/angle_max:  1.0    # the angle (in radians) left for which the rover will move with the maximum speed
-# rotate_to_docking_point/epsilon: 0.1     # specific epsilon for "RotateToDockingPoint" state calculations
-# rotate_to_docking_point/timeout: 3.0     # specific timeout for "RotateToDockingPoint" state blocking events
+rotate_to_docking_point/speed_min:  0.1                     # minimal angular speed
+rotate_to_docking_point/speed_max:  0.4                     # maximum angular speed
+rotate_to_docking_point/angle_min:  0.05                    # the angle (in radians) left for which the rover will move with the minimal speed
+rotate_to_docking_point/angle_max:  1.0                     # the angle (in radians) left for which the rover will move with the maximum speed
+rotate_to_docking_point/min_docking_point_distance: 0.1     # minimum distance to the docking point for the rover to execute this state (prevents from infinite execution)
+# rotate_to_docking_point/epsilon: 0.1                      # specific epsilon for "RotateToDockingPoint" state calculations
+# rotate_to_docking_point/timeout: 3.0                      # specific timeout for "RotateToDockingPoint" state blocking events
 
 
 # -------------------------------------- REACHING DOCKING POINT PARAMS ----------------------------
 reach_docking_point/speed_min: 0.1          # minimal linear speed
 reach_docking_point/speed_max: 0.3          # maximum linear speed
-reach_docking_point/distance_min: 0.05       # distance left (in meters) for which the rover will move with the minimal speed
+reach_docking_point/distance_min: 0.05      # distance left (in meters) for which the rover will move with the minimal speed
 reach_docking_point/distance_max: 1.5       # distance left (in meters) for which the rover will move with the maximum speed
 reach_docking_point/bias_speed_min: 0.05    # minimal angular speed for the correction movement
 reach_docking_point/bias_speed_max: 0.3     # maximum angular speed for the correction movement

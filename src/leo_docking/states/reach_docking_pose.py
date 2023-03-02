@@ -229,7 +229,7 @@ class BaseDockingState(smach.State):
         rate = rospy.Rate(10)
         time_start = rospy.Time.now()
         self.vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
-        
+
         while not self.board_flag.is_set() or not self.odom_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
@@ -239,7 +239,7 @@ class BaseDockingState(smach.State):
             if (rospy.Time.now() - time_start).to_sec() > self.timeout:
                 self.board_sub.unregister()
                 self.wheel_odom_sub.unregister()
-                
+
                 if not self.board_flag.is_set():
                     rospy.logerr(f"Board (id: {self.board_id}) lost. Docking failed.")
                     ud.action_result.result = (
@@ -248,9 +248,7 @@ class BaseDockingState(smach.State):
                     return "board_lost"
                 else:
                     rospy.logerr("Didn't get wheel odometry message. Docking failed.")
-                    ud.action_result.result = (
-                        f"{self.state_log_name}: wheel odometry not working. Docking failed."
-                    )
+                    ud.action_result.result = f"{self.state_log_name}: wheel odometry not working. Docking failed."
                     return "odometry_not_working"
 
             rate.sleep()
@@ -299,6 +297,7 @@ class RotateToDockingPoint(BaseDockingState):
         angle_max=1.0,
         epsilon=0.01,
         docking_point_distance=0.6,
+        min_docking_point_distance=0.1,
         debug=True,
         angular=True,
         name="Rotate To Docking Point",
@@ -322,6 +321,10 @@ class RotateToDockingPoint(BaseDockingState):
         speed_max = rospy.get_param("~rotate_to_docking_point/speed_max", speed_max)
         angle_min = rospy.get_param("~rotate_to_docking_point/angle_min", angle_min)
         angle_max = rospy.get_param("~rotate_to_docking_point/angle_max", angle_max)
+        self.min_distance = rospy.get_param(
+            "~rotate_to_docking_point/min_docking_point_distance",
+            min_docking_point_distance,
+        )
 
         super().__init__(
             timeout=timeout,
@@ -341,8 +344,12 @@ class RotateToDockingPoint(BaseDockingState):
             board, distance=self.docking_point_distance
         )
 
-        if math.sqrt(docking_point.y() ** 2 + docking_point.x() ** 2) < 0.1:
+        if (
+            math.sqrt(docking_point.y() ** 2 + docking_point.x() ** 2)
+            < self.min_distance
+        ):
             self.route_left = 0.0
+            rospy.loginfo("Rover to close to the docking point in the beginning of docking process.")
         else:
             angle = math.atan2(docking_point.y(), docking_point.x())
             self.movement_direction = 1 if angle >= 0 else -1
@@ -514,18 +521,10 @@ class ReachDockingOrientation(BaseDockingState):
         )
         debug = rospy.get_param("~debug", debug)
 
-        speed_min = rospy.get_param(
-            "~reach_docking_orientation/speed_min", speed_min
-        )
-        speed_max = rospy.get_param(
-            "~reach_docking_orientation/speed_max", speed_max
-        )
-        angle_min = rospy.get_param(
-            "~reach_docking_orientation/angle_min", angle_min
-        )
-        angle_max = rospy.get_param(
-            "~reach_docking_orientation/angle_max", angle_max
-        )
+        speed_min = rospy.get_param("~reach_docking_orientation/speed_min", speed_min)
+        speed_max = rospy.get_param("~reach_docking_orientation/speed_max", speed_max)
+        angle_min = rospy.get_param("~reach_docking_orientation/angle_min", angle_min)
+        angle_max = rospy.get_param("~reach_docking_orientation/angle_max", angle_max)
 
         super().__init__(
             timeout=timeout,

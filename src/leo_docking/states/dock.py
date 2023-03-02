@@ -50,6 +50,7 @@ class Dock(BaseDockingState):
         battery_averaging_time=1.0,
         effort_summary_threshold=2.0,
         effort_buffer_size=10,
+        motor_cd_time=2.0,
         name="Dock",
     ):
         if rospy.has_param("~dock/timeout"):
@@ -92,6 +93,8 @@ class Dock(BaseDockingState):
             "~battery_averaging_time", battery_averaging_time
         )
 
+        self.motor_cd_time = rospy.get_param("~motor_cd_time", motor_cd_time)
+
         self.effort_lock: Lock = Lock()
         self.effort_threshold = rospy.get_param(
             "~effort_threshold", effort_summary_threshold
@@ -101,12 +104,8 @@ class Dock(BaseDockingState):
         self.bias_max = rospy.get_param("~dock/bias_max", bias_max)
         self.bias_left = 0.0
         self.bias_done = 0.0
-        self.bias_speed_min = rospy.get_param(
-            "~dock/bias_speed_min", bias_speed_min
-        )
-        self.bias_speed_max = rospy.get_param(
-            "~dock/bias_speed_max", bias_speed_max
-        )
+        self.bias_speed_min = rospy.get_param("~dock/bias_speed_min", bias_speed_min)
+        self.bias_speed_max = rospy.get_param("~dock/bias_speed_max", bias_speed_max)
         self.bias_direction = 0.0
 
         self.reset_state()
@@ -167,7 +166,7 @@ class Dock(BaseDockingState):
         """Function performing rover movement; invoked in the "execute" method of the state."""
 
         rospy.loginfo("Waiting for motors effort and battery voltage to drop.")
-        rospy.sleep(rospy.Duration(secs=2.0))
+        rospy.sleep(rospy.Duration(secs=self.motor_cd_time))
 
         with self.battery_lock:
             self.end_time = rospy.Time.now() + rospy.Duration(secs=self.collection_time)
