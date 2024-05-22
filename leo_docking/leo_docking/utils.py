@@ -1,10 +1,17 @@
+#  ------------------------------------------------------------------
+#   Copyright (C) Karelics Oy - All Rights Reserved
+#   Unauthorized copying of this file, via any medium is strictly
+#   prohibited. All information contained herein is, and remains
+#   the property of Karelics Oy.
+#  ------------------------------------------------------------------
+
 from __future__ import annotations
 from typing import Tuple
 
 import math
 
 import tf2_ros
-import rospy
+from rclpy.clock import ROSClock
 
 from geometry_msgs.msg import TransformStamped, Pose
 from aruco_opencv_msgs.msg import BoardPose
@@ -116,14 +123,14 @@ def get_location_points_from_board(
 
     # getting docking point - rotating vector (distance, 0, 0) by board orientation
     docking_point_base = PyKDL.Vector(distance, 0.0, 0.0)
-    # no need of projection to z=0.0 beceause we use normalized board which is already on z=0.0
+    # no need of projection to z=0.0 because we use normalized board which is already on z=0.0
     docking_point = board_frame * docking_point_base
 
     # target orientation
     angle, *_ = board_frame.M.GetEulerZYX()
     docking_orientation = PyKDL.Rotation.RotZ(angle + math.pi).GetQuaternion()
 
-    return (docking_point, docking_orientation)
+    return docking_point, docking_orientation
 
 
 def calculate_odom_diff_pose(
@@ -207,7 +214,7 @@ def visualize_position(
         frame_id: name of the parent frame of the transformation
         child_frame_id: name of the child frame of the transformation
         seq: sequence number of the transform needed for header
-        br: transform boradcaster
+        tf_broadcaster: transform boradcaster
     """
 
     msg = TransformStamped()
@@ -226,7 +233,7 @@ def visualize_position(
     # filling header
     msg.child_frame_id = child_frame_id
     msg.header.frame_id = frame_id
-    msg.header.stamp = rospy.Time.now()
+    msg.header.stamp = ROSClock().now().to_msg()
     msg.header.seq = seq
 
     # sending transform

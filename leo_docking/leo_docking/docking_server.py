@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
-
-import rospy
+import rclpy
 import smach
 import smach_ros
+from rclpy.executors import SingleThreadedExecutor
 from smach_ros import ActionServerWrapper
-from leo_docking.msg import PerformDockingAction
+from leo_docking_msgs.action import PerformDocking
 
-from leo_docking.states import (
-    StartState,
-    CheckArea,
-    RideToDockArea,
-    RotateToBoard,
-    RotateToDockArea,
-    ReachDockingPoint,
+from leo_docking.states.start import StartState
+from leo_docking.states.check_area import CheckArea
+from leo_docking.states.reach_docking_area import RideToDockArea, RotateToDockArea, RotateToBoard
+from leo_docking.states.reach_docking_pose import (
     RotateToDockingPoint,
+    ReachDockingPoint,
     ReachDockingOrientation,
-    Dock,
 )
+from leo_docking.states.dock import Dock
 
 
-def create_state_machine() -> smach.StateMachine:
+def create_state_machine(node) -> smach.StateMachine:
     sm = smach.StateMachine(
         outcomes=["ROVER DOCKED", "DOCKING FAILED", "DOCKING PREEMPTED"],
         input_keys=["action_goal", "action_feedback", "action_result"],
@@ -28,7 +26,7 @@ def create_state_machine() -> smach.StateMachine:
     with sm:
         smach.StateMachine.add(
             "Start",
-            StartState(timeout=5.0),
+            StartState(node=node, timeout=5.0),
             transitions={
                 "board_not_found": "DOCKING FAILED",
                 "board_found": "Check Area",
@@ -43,7 +41,7 @@ def create_state_machine() -> smach.StateMachine:
 
         smach.StateMachine.add(
             "Check Area",
-            CheckArea(timeout=5, threshold_angle=0.17),
+            CheckArea(node=node, timeout=5, threshold_angle=0.17),
             transitions={
                 "board_lost": "DOCKING FAILED",
                 "docking_area": "Reach Docking Point",
@@ -67,7 +65,7 @@ def create_state_machine() -> smach.StateMachine:
         with reach_docking_area:
             smach.Sequence.add(
                 "Rotate To Dock Area",
-                RotateToDockArea(timeout=2.0),
+                RotateToDockArea(node=node, timeout=2.0),
                 remapping={
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
@@ -76,7 +74,7 @@ def create_state_machine() -> smach.StateMachine:
             )
             smach.Sequence.add(
                 "Ride To Area",
-                RideToDockArea(timeout=2.0),
+                RideToDockArea(node=node, timeout=2.0),
                 remapping={
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
@@ -85,7 +83,7 @@ def create_state_machine() -> smach.StateMachine:
             )
             smach.Sequence.add(
                 "Rotate To Board",
-                RotateToBoard(timeout=2.0),
+                RotateToBoard(node=node, timeout=2.0),
                 remapping={
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
@@ -117,17 +115,17 @@ def create_state_machine() -> smach.StateMachine:
         with reach_docking_pose:
             smach.Sequence.add(
                 "Rotate To Docking Point",
-                RotateToDockingPoint(timeout=2.0, docking_point_distance=0.8),
+                RotateToDockingPoint(node=node, timeout=2.0, docking_point_distance=0.8),
             )
 
             smach.Sequence.add(
                 "Reach Docking Point",
-                ReachDockingPoint(timeout=2.0, docking_point_distance=0.8),
+                ReachDockingPoint(node=node, timeout=2.0, docking_point_distance=0.8),
             )
 
             smach.Sequence.add(
                 "Reach Docking Orientation",
-                ReachDockingOrientation(timeout=2.0, docking_point_distance=0.8),
+                ReachDockingOrientation(node=node, timeout=2.0, docking_point_distance=0.8),
             )
 
         smach.StateMachine.add(
@@ -148,7 +146,7 @@ def create_state_machine() -> smach.StateMachine:
 
         smach.StateMachine.add(
             "Dock",
-            Dock(epsilon=0.05),
+            Dock(node=node, epsilon=0.05),
             transitions={
                 "succeeded": "ROVER DOCKED",
                 "odometry_not_working": "DOCKING FAILED",
@@ -165,30 +163,51 @@ def create_state_machine() -> smach.StateMachine:
     return sm
 
 
-def main():
-    rospy.init_node("leo_docking", log_level=rospy.INFO)
+class DockingServer(rclpy.node.Node):
+    def __init__(self):
+        super().__init__("docking_server")
+        self._state_machine = create_state_machine(self)
 
-    sm = create_state_machine()
+        self._action_server_wrapper = ActionServerWrapper(
+            node=self,
+            server_name="leo_docking_action_server",
+            action_spec=PerformDocking,
+            wrapped_container=self._state_machine,
+            succeeded_outcomes=["ROVER DOCKED"],
+            aborted_outcomes=["DOCKING FAILED"],
+            preempted_outcomes=["DOCKING PREEMPTED"],
+            goal_key="action_goal",
+            feedback_key="action_feedback",
+            result_key="action_result",
+        )
 
-    asw = ActionServerWrapper(
-        "leo_docking_action_server",
-        PerformDockingAction,
-        wrapped_container=sm,
-        succeeded_outcomes=["ROVER DOCKED"],
-        aborted_outcomes=["DOCKING FAILED"],
-        preempted_outcomes=["DOCKING PREEMPTED"],
-        goal_key="action_goal",
-        feedback_key="action_feedback",
-        result_key="action_result",
-    )
+        # Create and start the introspection server
+        self._smach_introspection_server = smach_ros.IntrospectionServer(
+            "leo_docking", self._state_machine, "/LEO_DOCKING"
+        )
 
-    # Create and start the introspection server
-    sis = smach_ros.IntrospectionServer("leo_docking", sm, "/LEO_DOCKING")
-    sis.start()
+    def start(self):
+        self._smach_introspection_server.start()
+        self._action_server_wrapper.run_server()
 
-    # Run the action server in a background thread
-    asw.run_server()
+    def stop(self):
+        self._smach_introspection_server.stop()
 
-    # Wait for ctrl-c to stop the application
-    rospy.spin()
-    sis.stop()
+
+if __name__ == "__main__":
+    rclpy.init()
+    node = DockingServer()
+    node.start()
+
+    executor = SingleThreadedExecutor()
+    executor.add_node(node)
+    try:
+        executor.spin()
+    except KeyboardInterrupt:
+        pass
+
+    node.stop()
+    executor.shutdown()
+    node.destroy_node()
+    rclpy.try_shutdown()
+

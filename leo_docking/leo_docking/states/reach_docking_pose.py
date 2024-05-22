@@ -1,9 +1,9 @@
 from __future__ import annotations
-from typing import Optional
+from typing import Optional, List
 from threading import Lock, Event
 import math
 
-import rospy
+import rclpy
 import tf2_ros
 import smach
 
@@ -29,20 +29,26 @@ class BaseDockingState(smach.State):
 
     def __init__(
         self,
-        outcomes=["succeeded", "odometry_not_working", "board_lost", "preempted"],
-        input_keys=["action_goal", "action_feedback", "action_result"],
-        timeout=3.0,
-        speed_min=0.1,
-        speed_max=0.4,
-        route_min=0.05,
-        route_max=1.0,
-        epsilon=0.01,
-        docking_point_distance=0.6,
-        debug=False,
-        angle=True,
-        name="",
+        node: rclpy.node.Node,
+        outcomes: Optional[List[str]] = None,
+        input_keys: Optional[List[str]] = None,
+        timeout: int = 3,
+        speed_min: float = 0.1,
+        speed_max: float = 0.4,
+        route_min: float = 0.05,
+        route_max: float = 1.0,
+        epsilon: float = 0.01,
+        docking_point_distance: float = 0.6,
+        debug: bool = False,
+        angle: bool = True,
+        name: str = "",
     ):
+        if outcomes is None:
+            outcomes = ["succeeded", "odometry_not_working", "board_lost", "preempted"]
+        if input_keys is None:
+            input_keys = ["action_goal", "action_feedback", "action_result"]
         super().__init__(outcomes, input_keys)
+        self.node = node
         self.timeout = timeout
         self.speed_min = speed_min
         self.speed_max = speed_max
@@ -56,8 +62,8 @@ class BaseDockingState(smach.State):
         self.route_lock: Lock = Lock()
         self.odom_lock: Lock = Lock()
 
-        self.odom_reference: Odometry = None
-        self.current_odom: Odometry = None
+        self.odom_reference: Optional[Odometry] = None
+        self.current_odom: Optional[Odometry] = None
 
         self.route_left = 0.0
         self.route_done = -1.0
@@ -71,7 +77,16 @@ class BaseDockingState(smach.State):
         # debug variables
         self.debug = debug
         self.seq = 0
-        self.tf_broadcaster = tf2_ros.TransformBroadcaster()
+        self.tf_broadcaster = tf2_ros.TransformBroadcaster(node=self.node)
+
+        self.board_sub = self.node.create_subscription(
+            ArucoDetection, "aruco_detections", self.board_callback, qos_profile=1
+        )
+        self.wheel_odom_sub = self.node.create_subscription(
+            Odometry, "wheel_odom_with_covariance", self.wheel_odom_callback, qos_profile=1
+        )
+
+        self.vel_pub = self.node.create_publisher(Twist, "cmd_vel", qos_profile=1)
 
         self.reset_state()
 
@@ -102,7 +117,7 @@ class BaseDockingState(smach.State):
     def movement_loop(self) -> Optional[str]:
         """Function performing rover movement; invoked in the "execute" method of the state."""
         msg = Twist()
-        rate = rospy.Rate(10)
+        rate = self.node.create_rate(10)
 
         while True:
             with self.route_lock:
@@ -218,17 +233,8 @@ class BaseDockingState(smach.State):
 
         self.board_id = ud.action_goal.board_id
 
-        self.board_sub = rospy.Subscriber(
-            "aruco_detections", ArucoDetection, self.board_callback, queue_size=1
-        )
-
-        self.wheel_odom_sub = rospy.Subscriber(
-            "wheel_odom_with_covariance", Odometry, self.wheel_odom_callback
-        )
-
-        rate = rospy.Rate(10)
-        time_start = rospy.Time.now()
-        self.vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
+        rate = self.node.create_rate(10)
+        time_start = self.node.get_clock().now()
 
         while not self.board_flag.is_set() or not self.odom_flag.is_set():
             if self.preempt_requested():
@@ -236,18 +242,16 @@ class BaseDockingState(smach.State):
                 ud.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
 
-            if (rospy.Time.now() - time_start).to_sec() > self.timeout:
-                self.board_sub.unregister()
-                self.wheel_odom_sub.unregister()
+            if (self.node.get_clock().now() - time_start).to_sec() > self.timeout:
 
                 if not self.board_flag.is_set():
-                    rospy.logerr(f"Board (id: {self.board_id}) lost. Docking failed.")
+                    self.node.get_logger().error(f"Board (id: {self.board_id}) lost. Docking failed.")
                     ud.action_result.result = (
                         f"{self.state_log_name}: Board lost. Docking failed."
                     )
                     return "board_lost"
                 else:
-                    rospy.logerr("Didn't get wheel odometry message. Docking failed.")
+                    self.node.get_logger().error("Didn't get wheel odometry message. Docking failed.")
                     ud.action_result.result = f"{self.state_log_name}: wheel odometry not working. Docking failed."
                     return "odometry_not_working"
 
@@ -257,10 +261,6 @@ class BaseDockingState(smach.State):
         if outcome:
             ud.action_result.result = f"{self.state_log_name}: state preempted."
             return "preempted"
-
-        self.wheel_odom_sub.unregister()
-        self.board_sub.unregister()
-        self.vel_pub.unregister()
 
         ud.action_feedback.current_state = (
             f"'Reach Docking Point': sequence completed. "
@@ -274,11 +274,8 @@ class BaseDockingState(smach.State):
         """Function called when the state catches preemption request.
         Removes all the publishers and subscribers of the state.
         """
-        rospy.logwarn(f"Preemption request handling for {self.state_log_name} state")
+        self.node.get_logger().error(f"Preemption request handling for {self.state_log_name} state")
         self.vel_pub.publish(Twist())
-        self.vel_pub.unregister()
-        self.wheel_odom_sub.unregister()
-        self.board_sub.unregister()
         return super().service_preempt()
 
 
@@ -290,43 +287,33 @@ class RotateToDockingPoint(BaseDockingState):
 
     def __init__(
         self,
-        timeout=3.0,
-        speed_min=0.1,
-        speed_max=0.4,
-        angle_min=0.05,
-        angle_max=1.0,
-        epsilon=0.01,
-        docking_point_distance=0.6,
-        min_docking_point_distance=0.1,
-        debug=True,
-        angular=True,
-        name="Rotate To Docking Point",
+        node: rclpy.node.Node,
+        timeout: int = 3,
+        speed_min: float = 0.1,
+        speed_max: float = 0.4,
+        angle_min: float = 0.05,
+        angle_max: float = 1.0,
+        epsilon: float = 0.01,
+        docking_point_distance: float = 0.6,
+        min_docking_point_distance: float = 0.1,
+        debug: bool = True,
+        angular: bool = True,
+        name: str = "Rotate To Docking Point",
     ):
-        if rospy.has_param("~rotate_to_docking_point/timeout"):
-            timeout = rospy.get_param("~rotate_to_docking_point/timeout", timeout)
-        else:
-            timeout = rospy.get_param("~timeout", timeout)
-
-        if rospy.has_param("~rotate_to_docking_point/epsilon"):
-            epsilon = rospy.get_param("~rotate_to_docking_point/epsilon", epsilon)
-        else:
-            epsilon = rospy.get_param("~epsilon", epsilon)
-
-        docking_point_distance = rospy.get_param(
-            "~docking_point_distance", docking_point_distance
-        )
-        debug = rospy.get_param("~debug", debug)
-
-        speed_min = rospy.get_param("~rotate_to_docking_point/speed_min", speed_min)
-        speed_max = rospy.get_param("~rotate_to_docking_point/speed_max", speed_max)
-        angle_min = rospy.get_param("~rotate_to_docking_point/angle_min", angle_min)
-        angle_max = rospy.get_param("~rotate_to_docking_point/angle_max", angle_max)
-        self.min_distance = rospy.get_param(
-            "~rotate_to_docking_point/min_docking_point_distance",
-            min_docking_point_distance,
-        )
+        timeout = node.declare_parameter("rotate_to_docking_point/timeout", timeout).value
+        epsilon = node.declare_parameter("rotate_to_docking_point/epsilon", epsilon).value
+        speed_min = node.declare_parameter("rotate_to_docking_point/speed_min", speed_min).value
+        speed_max = node.declare_parameter("rotate_to_docking_point/speed_max", speed_max).value
+        angle_min = node.declare_parameter("rotate_to_docking_point/angle_min", angle_min).value
+        angle_max = node.declare_parameter("rotate_to_docking_point/angle_max", angle_max).value
+        docking_point_distance = node.declare_parameter("docking_point_distance", docking_point_distance).value
+        self.min_distance = node.declare_parameter(
+            "rotate_to_docking_point/min_docking_point_distance", min_docking_point_distance
+        ).value
+        debug = node.declare_parameter("debug", debug).value
 
         super().__init__(
+            node,
             timeout=timeout,
             speed_min=speed_min,
             speed_max=speed_max,
@@ -349,7 +336,7 @@ class RotateToDockingPoint(BaseDockingState):
             < self.min_distance
         ):
             self.route_left = 0.0
-            rospy.loginfo("Rover to close to the docking point in the beginning of docking process.")
+            self.node.get_logger().info("Rover to close to the docking point in the beginning of docking process.")
         else:
             angle = math.atan2(docking_point.y(), docking_point.x())
             self.movement_direction = 1 if angle >= 0 else -1
@@ -366,42 +353,33 @@ class ReachDockingPoint(BaseDockingState):
 
     def __init__(
         self,
-        timeout=3,
-        speed_min=0.1,
-        speed_max=0.3,
-        dist_min=0.05,
-        dist_max=1.5,
-        bias_min=0.01,
-        bias_max=0.10,
-        bias_speed_min=0.05,
-        bias_speed_max=0.3,
-        epsilon=0.01,
-        docking_point_distance=0.6,
-        debug=True,
-        angular=False,
-        name="Reach Docking Point",
+        node: rclpy.node.Node,
+        timeout: int = 3,
+        speed_min: float = 0.1,
+        speed_max: float = 0.3,
+        dist_min: float = 0.05,
+        dist_max: float = 1.5,
+        bias_min: float = 0.01,
+        bias_max: float = 0.10,
+        bias_speed_min: float = 0.05,
+        bias_speed_max: float = 0.3,
+        epsilon: float = 0.01,
+        docking_point_distance: float = 0.6,
+        debug: bool = True,
+        angular: bool = False,
+        name: str = "Reach Docking Point",
     ):
-        if rospy.has_param("~reach_docking_point/timeout"):
-            timeout = rospy.get_param("~reach_docking_point/timeout", timeout)
-        else:
-            timeout = rospy.get_param("~timeout", timeout)
-
-        if rospy.has_param("~reach_docking_point/epsilon"):
-            epsilon = rospy.get_param("~reach_docking_point/epsilon", epsilon)
-        else:
-            epsilon = rospy.get_param("~epsilon", epsilon)
-
-        docking_point_distance = rospy.get_param(
-            "~docking_point_distance", docking_point_distance
-        )
-        debug = rospy.get_param("~debug", debug)
-
-        speed_min = rospy.get_param("~reach_docking_point/speed_min", speed_min)
-        speed_max = rospy.get_param("~reach_docking_point/speed_max", speed_max)
-        dist_min = rospy.get_param("~reach_docking_point/distance_min", dist_min)
-        dist_max = rospy.get_param("~reach_docking_point/distance_max", dist_max)
+        timeout = node.declare_parameter("reach_docking_point/timeout", timeout).value
+        epsilon = node.declare_parameter("reach_docking_point/epsilon", epsilon).value
+        speed_min = node.declare_parameter("reach_docking_point/speed_min", speed_min).value
+        speed_max = node.declare_parameter("reach_docking_point/speed_max", speed_max).value
+        dist_min = node.declare_parameter("reach_docking_point/distance_min", dist_min).value
+        dist_max = node.declare_parameter("reach_docking_point/distance_max", dist_max).value
+        docking_point_distance = node.declare_parameter("docking_point_distance", docking_point_distance).value
+        debug = node.declare_parameter("debug", debug).value
 
         super().__init__(
+            node,
             timeout=timeout,
             speed_min=speed_min,
             speed_max=speed_max,
@@ -414,16 +392,12 @@ class ReachDockingPoint(BaseDockingState):
             name=name,
         )
 
-        self.bias_min = rospy.get_param("~reach_docking_point/bias_min", bias_min)
-        self.bias_max = rospy.get_param("~reach_docking_point/bias_max", bias_max)
+        self.bias_min = node.declare_parameter("reach_docking_point/bias_min", bias_min).value
+        self.bias_max = node.declare_parameter("reach_docking_point/bias_max", bias_max).value
         self.bias_left = 0.0
         self.bias_done = 0.0
-        self.bias_speed_min = rospy.get_param(
-            "~reach_docking_point/bias_speed_min", bias_speed_min
-        )
-        self.bias_speed_max = rospy.get_param(
-            "~reach_docking_point/bias_speed_max", bias_speed_max
-        )
+        self.bias_speed_min = node.declare_parameter("reach_docking_point/bias_speed_min", bias_speed_min).value
+        self.bias_speed_max = node.declare_parameter("reach_docking_point/bias_speed_max", bias_speed_max).value
         self.bias_direction = 0.0
 
         self.reset_state()
@@ -436,7 +410,7 @@ class ReachDockingPoint(BaseDockingState):
 
     def movement_loop(self) -> Optional[str]:
         msg = Twist()
-        rate = rospy.Rate(10)
+        rate = self.node.create_rate(10)
 
         while True:
             with self.route_lock:
@@ -495,38 +469,29 @@ class ReachDockingOrientation(BaseDockingState):
 
     def __init__(
         self,
-        timeout=3,
-        speed_min=0.1,
-        speed_max=0.4,
-        angle_min=0.05,
-        angle_max=1,
-        epsilon=0.01,
-        docking_point_distance=0.6,
-        debug=True,
-        angular=True,
-        name="Reach Dockin Orientation",
+        node: rclpy.node.Node,
+        timeout: int = 3,
+        speed_min: float = 0.1,
+        speed_max: float = 0.4,
+        angle_min: float = 0.05,
+        angle_max: float = 1,
+        epsilon: float = 0.01,
+        docking_point_distance: float = 0.6,
+        debug: bool = True,
+        angular: bool = True,
+        name: str = "Reach Dockin Orientation",
     ):
-        if rospy.has_param("~reach_docking_orientation/timeout"):
-            timeout = rospy.get_param("~reach_docking_orientation/timeout", timeout)
-        else:
-            timeout = rospy.get_param("~timeout", timeout)
-
-        if rospy.has_param("~reach_docking_orientation/epsilon"):
-            epsilon = rospy.get_param("~reach_docking_orientation/epsilon", epsilon)
-        else:
-            epsilon = rospy.get_param("~epsilon", epsilon)
-
-        docking_point_distance = rospy.get_param(
-            "~docking_point_distance", docking_point_distance
-        )
-        debug = rospy.get_param("~debug", debug)
-
-        speed_min = rospy.get_param("~reach_docking_orientation/speed_min", speed_min)
-        speed_max = rospy.get_param("~reach_docking_orientation/speed_max", speed_max)
-        angle_min = rospy.get_param("~reach_docking_orientation/angle_min", angle_min)
-        angle_max = rospy.get_param("~reach_docking_orientation/angle_max", angle_max)
+        timeout = node.declare_parameter("rotate_to_docking_point/timeout", timeout).value
+        epsilon = node.declare_parameter("rotate_to_docking_point/epsilon", epsilon).value
+        speed_min = node.declare_parameter("rotate_to_docking_point/speed_min", speed_min).value
+        speed_max = node.declare_parameter("rotate_to_docking_point/speed_max", speed_max).value
+        angle_min = node.declare_parameter("rotate_to_docking_point/angle_min", angle_min).value
+        angle_max = node.declare_parameter("rotate_to_docking_point/angle_max", angle_max).value
+        docking_point_distance = node.declare_parameter("docking_point_distance", docking_point_distance).value
+        debug = node.declare_parameter("debug", debug).value
 
         super().__init__(
+            node,
             timeout=timeout,
             speed_min=speed_min,
             speed_max=speed_max,

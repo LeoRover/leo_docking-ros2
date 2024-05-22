@@ -1,7 +1,7 @@
 import math
 from threading import Event
 
-import rospy
+import rclpy
 import smach
 
 from aruco_opencv_msgs.msg import ArucoDetection
@@ -13,6 +13,7 @@ from leo_docking.utils import (
     get_location_points_from_board,
     visualize_position,
 )
+from typing import List, Optional
 
 
 class CheckArea(smach.State):
@@ -22,28 +23,38 @@ class CheckArea(smach.State):
 
     def __init__(
         self,
-        outcomes=["docking_area", "outside_docking_area", "board_lost", "preempted"],
-        input_keys=["action_goal", "action_feedback", "action_result"],
-        output_keys=["target_pose"],
-        threshold_angle=0.26,  # 15 degrees
-        docking_distance=2.0,
-        timeout=3.0,
-        name="Check Area",
+        node: rclpy.node.Node,
+        outcomes: Optional[List[str]] = None,
+        input_keys: Optional[List[str]] = None,
+        output_keys: Optional[List[str]] = None,
+        threshold_angle: float = 0.26,  # 15 degrees
+        docking_distance: float = 2.0,
+        timeout: int = 3,
+        name: str = "Check Area",
     ):
+        if output_keys is None:
+            output_keys = ["target_pose"]
+        if input_keys is None:
+            input_keys = ["action_goal", "action_feedback", "action_result"]
+        if outcomes is None:
+            outcomes = ["docking_area", "outside_docking_area", "board_lost", "preempted"]
         super().__init__(
             outcomes=outcomes, input_keys=input_keys, output_keys=output_keys
         )
+        self.board_id = None
+        self.board = None
+        self.node = node
 
-        self.threshold_angle = rospy.get_param("~threshold_angle", threshold_angle)
-        self.docking_distance = rospy.get_param("~docking_distance", docking_distance)
-
-        if rospy.has_param("~check_area/timeout"):
-            self.timeout = rospy.get_param("~check_area/timeout", timeout)
-        else:
-            self.timeout = rospy.get_param("~timeout", timeout)
+        self.threshold_angle = self.node.declare_parameter("threshold_angle", threshold_angle).value
+        self.docking_distance = self.node.declare_parameter("docking_distance", docking_distance).value
+        self.timeout = self.node.declare_parameter("timeout", timeout).value
 
         self.board_flag = Event()
         self.state_log_name = name
+
+        self.board_sub = self.node.create_subscription(
+            ArucoDetection, "aruco_detections", self.board_callback, qos_profile=1
+        )
 
         self.reset_state()
 
@@ -81,8 +92,7 @@ class CheckArea(smach.State):
         """Function called when the state catches preemption request.
         Removes all the publishers and subscribers of the state.
         """
-        rospy.logwarn(f"Preemption request handling for '{self.state_log_name}' state.")
-        self.board_sub.unregister()
+        self.node.get_logger().warn(f"Preemption request handling for '{self.state_log_name}' state.")
         return super().service_preempt()
 
     def execute(self, ud):
@@ -92,36 +102,29 @@ class CheckArea(smach.State):
         self.reset_state()
 
         self.board_id = ud.action_goal.board_id
-        self.board_sub = rospy.Subscriber(
-            "aruco_detections", ArucoDetection, self.board_callback, queue_size=1
-        )
-        rospy.loginfo(f"Waiting for board (id: {self.board_id}) detection.")
+        self.node.get_logger().info(f"Waiting for board (id: {self.board_id}) detection.")
 
-        rate = rospy.Rate(10)
-        time_start = rospy.Time.now()
+        rate = self.node.create_rate(10)
+        time_start = self.node.get_clock().now()
         while not self.board_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
                 ud.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
-
-            if (rospy.Time.now() - time_start).to_sec() > self.timeout:
-                rospy.logerr(f"Board (id: {self.board_id}) lost. Docking failed.")
+            secs, _ = (self.node.get_clock().now() - time_start).seconds_nanoseconds()
+            if secs > self.timeout:
+                self.node.get_logger().error(f"Board (id: {self.board_id}) lost. Docking failed.")
                 ud.action_result.result = (
                     f"{self.state_log_name}: board lost. Docking failed."
                 )
-                self.board_sub.unregister()
                 return "board_lost"
 
             rate.sleep()
-
-        self.board_sub.unregister()
 
         # calculating the length of distances needed for threshold checking
         x_dist, y_dist = calculate_threshold_distances(self.board)
 
         if self.check_threshold(x_dist, y_dist):
-            self.board_sub.unregister()
             ud.action_feedback.current_state = (
                 f"{self.state_log_name}: docking possible from current position. "
                 f"Proceeding to 'Reaching Docking Point` sequence."

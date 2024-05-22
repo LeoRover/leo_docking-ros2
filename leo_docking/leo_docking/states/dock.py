@@ -4,8 +4,9 @@ from threading import Lock
 from queue import Queue
 import math
 import numpy as np
-
-import rospy
+import time
+import rclpy
+from rclpy.time import Time
 
 from aruco_opencv_msgs.msg import BoardPose
 from geometry_msgs.msg import Twist
@@ -34,43 +35,36 @@ class Dock(BaseDockingState):
 
     def __init__(
         self,
-        timeout=3,
-        speed_min=0.05,
-        speed_max=0.2,
-        route_min=0.05,
-        route_max=0.8,
-        bias_min=0.01,
-        bias_max=0.10,
-        bias_speed_min=0.05,
-        bias_speed_max=0.3,
-        epsilon=0.25,
-        debug=False,
-        battery_diff=0.2,
-        max_bat_average=11.0,
-        battery_averaging_time=1.0,
-        effort_summary_threshold=2.0,
-        effort_buffer_size=10,
-        motor_cd_time=2.0,
-        name="Dock",
+        node: rclpy.node.Node,
+        timeout: int = 3,
+        speed_min: float = 0.05,
+        speed_max: float = 0.2,
+        route_min: float = 0.05,
+        route_max: float = 0.8,
+        bias_min: float = 0.01,
+        bias_max: float = 0.10,
+        bias_speed_min: float = 0.05,
+        bias_speed_max: float = 0.3,
+        epsilon: float = 0.25,
+        debug: bool = False,
+        battery_diff: float = 0.2,
+        max_bat_average: float = 11.0,
+        battery_averaging_time: float = 1.0,
+        effort_summary_threshold: float = 2.0,
+        effort_buffer_size: float = 10,
+        motor_cd_time: float = 2.0,
+        name:str = "Dock",
     ):
-        if rospy.has_param("~dock/timeout"):
-            timeout = rospy.get_param("~dock/timeout", timeout)
-        else:
-            timeout = rospy.get_param("~timeout", timeout)
+        self.node = node
+        self.timeout = self.node.declare_parameter("dock/timeout", timeout).value
+        epsilon = self.node.declare_parameter("dock/epsilon", epsilon).value
+        debug = self.node.declare_parameter("debug", debug).value
+        speed_min = self.node.declare_parameter("dock/speed_min", speed_min).value
+        speed_max = self.node.declare_parameter("dock/speed_max", speed_max).value
+        route_min = self.node.declare_parameter("dock/distance_min", route_min).value
+        route_max = self.node.declare_parameter("dock/distance_max", route_max).value
 
-        if rospy.has_param("~dock/epsilon"):
-            epsilon = rospy.get_param("~dock/epsilon", epsilon)
-        else:
-            epsilon = rospy.get_param("~epsilon", epsilon)
-
-        debug = rospy.get_param("~debug", debug)
-
-        speed_min = rospy.get_param("~dock/speed_min", speed_min)
-        speed_max = rospy.get_param("~dock/speed_max", speed_max)
-        route_min = rospy.get_param("~dock/distance_min", route_min)
-        route_max = rospy.get_param("~dock/distance_max", route_max)
-
-        self.buff_size = rospy.get_param("~effort_buffer_size", effort_buffer_size)
+        self.buff_size = self.node.declare_parameter("effort_buffer_size", effort_buffer_size).value
 
         super().__init__(
             timeout=timeout,
@@ -84,29 +78,27 @@ class Dock(BaseDockingState):
         )
 
         self.battery_lock: Lock = Lock()
-        self.battery_diff = rospy.get_param("~battery_diff", battery_diff)
-        self.battery_threshold = rospy.get_param(
-            "~max_battery_average", max_bat_average
-        )
+        self.battery_diff = self.node.declare_parameter("~battery_diff", battery_diff).value
+        self.battery_threshold = self.node.declare_parameter("max_battery_average", max_bat_average).value
+        self.collection_time = self.node.declare_parameter("battery_averaging_time", battery_averaging_time).value
 
-        self.collection_time = rospy.get_param(
-            "~battery_averaging_time", battery_averaging_time
-        )
-
-        self.motor_cd_time = rospy.get_param("~motor_cd_time", motor_cd_time)
-
+        self.motor_cd_time = self.node.declare_parameter("motor_cd_time", motor_cd_time).value
         self.effort_lock: Lock = Lock()
-        self.effort_threshold = rospy.get_param(
-            "~effort_threshold", effort_summary_threshold
-        )
-
-        self.bias_min = rospy.get_param("~dock/bias_min", bias_min)
-        self.bias_max = rospy.get_param("~dock/bias_max", bias_max)
+        self.effort_threshold = self.node.declare_parameter("~effort_threshold", effort_summary_threshold).value
+        self.bias_min = self.node.declare_parameter("~dock/bias_min", bias_min).value
+        self.bias_max = self.node.declare_parameter("~dock/bias_max", bias_max).value
         self.bias_left = 0.0
         self.bias_done = 0.0
-        self.bias_speed_min = rospy.get_param("~dock/bias_speed_min", bias_speed_min)
-        self.bias_speed_max = rospy.get_param("~dock/bias_speed_max", bias_speed_max)
+        self.bias_speed_min = self.node.declare_parameter("~dock/bias_speed_min", bias_speed_min).value
+        self.bias_speed_max = self.node.declare_parameter("~dock/bias_speed_max", bias_speed_max).value
         self.bias_direction = 0.0
+
+        self.battery_sub = self.node.create_subscription(
+            Float32, "firmware/battery", self.battery_callback, qos_profile=1
+        )
+        self.joint_state_sub = self.node.create_subscription(
+            JointState, "joint_states", self.effort_callback, qos_profile=1
+        )
 
         self.reset_state()
 
@@ -128,7 +120,7 @@ class Dock(BaseDockingState):
         Calculates the battery average threshold and checks the battery stop condition.
         """
         with self.battery_lock:
-            if rospy.Time.now() < self.end_time:
+            if self.node.get_clock().now() < self.end_time:
                 self.acc_data += data.data
                 self.counter += 1
             elif not self.battery_reference:
@@ -165,45 +157,37 @@ class Dock(BaseDockingState):
     def movement_loop(self) -> Optional[str]:
         """Function performing rover movement; invoked in the "execute" method of the state."""
 
-        rospy.loginfo("Waiting for motors effort and battery voltage to drop.")
-        rospy.sleep(rospy.Duration(secs=self.motor_cd_time))
+        self.node.get_logger().info("Waiting for motors effort and battery voltage to drop.")
+        time.sleep(self.motor_cd_time)
 
         with self.battery_lock:
-            self.end_time = rospy.Time.now() + rospy.Duration(secs=self.collection_time)
-
-        self.battery_sub = rospy.Subscriber(
-            "firmware/battery", Float32, self.battery_callback, queue_size=1
-        )
+            self.end_time = self.node.get_clock().now() + Time(seconds=self.collection_time)
 
         # waiting for the end of colleting data
-        rospy.loginfo("Measuring battery data...")
-        rospy.sleep(rospy.Duration(secs=self.collection_time))
-        rospy.loginfo("Batery voltage average level calculated. Performing docking.")
-
-        self.joint_state_sub = rospy.Subscriber(
-            "joint_states", JointState, self.effort_callback, queue_size=1
-        )
+        self.node.get_logger().info("Measuring battery data...")
+        time.sleep(self.collection_time)
+        self.node.get_logger().info("Batery voltage average level calculated. Performing docking.")
 
         msg = Twist()
 
         while True:
             with self.battery_lock:
                 if self.charging:
-                    rospy.loginfo(
-                        f"Docking stopped. Condition: baterry charging detected."
+                    self.node.get_logger().info(
+                        f"Docking stopped. Condition: battery charging detected."
                     )
                     break
 
             with self.effort_lock:
                 if self.effort_stop:
-                    rospy.loginfo(
+                    self.node.get_logger().info(
                         f"Docking stopped. Condition: wheel motors effort rise detected."
                     )
                     break
 
             with self.route_lock:
                 if self.route_done + self.epsilon >= self.route_left:
-                    rospy.loginfo(
+                    self.node.get_logger().info(
                         f"Docking stopped. Condition: distance to board reached."
                     )
                     break
@@ -229,11 +213,9 @@ class Dock(BaseDockingState):
                     return "preempted"
 
                 self.vel_pub.publish(msg)
-            rospy.sleep(rospy.Duration(secs=0.1))
+            time.sleep(0.1)
 
         self.vel_pub.publish(Twist())
-        self.battery_sub.unregister()
-        self.joint_state_sub.unregister()
         return None
 
     def calculate_route_left(self, board: BoardPose) -> None:
@@ -253,8 +235,4 @@ class Dock(BaseDockingState):
         self.bias_done = angle_done_from_odom(odom_reference, current_odom)
 
     def service_preempt(self):
-        self.wheel_odom_sub.unregister()
-        self.board_sub.unregister()
-        self.battery_sub.unregister()
-        self.joint_state_sub.unregister()
         return super().service_preempt()

@@ -1,8 +1,8 @@
 import math
 from threading import Event, Lock
-from typing import Optional
+from typing import Optional, List
 
-import rospy
+import rclpy
 import smach
 
 from geometry_msgs.msg import Twist
@@ -23,20 +23,27 @@ class BaseDockAreaState(smach.State):
 
     def __init__(
         self,
-        outcomes=["succeeded", "odometry_not_working", "preempted"],
-        input_keys=["target_pose", "action_feedback", "action_result"],
-        output_keys=["target_pose"],
-        timeout=3.0,
-        speed_min=0.1,
-        speed_max=0.4,
-        route_min=0.0,
-        route_max=1.05,
-        epsilon=0.1,
-        angle=True,
-        name="",
+        node: rclpy.node.Node,
+        outcomes: Optional[List[str]] = None,
+        input_keys: Optional[List[str]] = None,
+        output_keys: Optional[List[str]] = None,
+        timeout: int = 3,
+        speed_min: float = 0.1,
+        speed_max: float = 0.4,
+        route_min: float = 0.0,
+        route_max: float = 1.05,
+        epsilon: float = 0.1,
+        angle: bool = True,
+        name: str = "",
     ):
+        if outcomes is None:
+            outcomes = ["succeeded", "odometry_not_working", "preempted"]
+        if input_keys is None:
+            input_keys = ["target_pose", "action_feedback", "action_result"]
+        if output_keys is None:
+            output_keys = ["target_pose"]
         super().__init__(outcomes, input_keys, output_keys)
-
+        self.node = node
         self.timeout = timeout
         self.speed_min = speed_min
         self.speed_max = speed_max
@@ -53,6 +60,11 @@ class BaseDockAreaState(smach.State):
 
         self.route_done = 0.0
         self.odom_reference = None
+
+        self.wheel_odom_sub = self.node.create_subscription(
+            Odometry, "wheel_odom_with_covariance", self.wheel_odom_callback, qos_profile=1
+        )
+        self.cmd_vel_pub = self.node.create_publisher(Twist, "cmd_vel", qos_profile=1)
 
         self.reset_state()
 
@@ -101,7 +113,7 @@ class BaseDockAreaState(smach.State):
         route_left = math.fabs(route_left)
         msg = Twist()
 
-        rate = rospy.Rate(10)
+        rate = self.node.create_rate(10)
 
         while True:
             with self.route_lock:
@@ -136,30 +148,22 @@ class BaseDockAreaState(smach.State):
         """Main state method, executed automatically on state entered"""
         self.reset_state()
 
-        self.wheel_odom_sub = rospy.Subscriber(
-            "wheel_odom_with_covariance", Odometry, self.wheel_odom_callback
-        )
-
-        
-        rate = rospy.Rate(10)
-        time_start = rospy.Time.now()
+        rate = self.node.create_rate(10)
+        time_start = self.node.get_clock().now()
         while not self.odom_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
                 ud.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
-
-            if (rospy.Time.now() - time_start).to_sec() > self.timeout:
-                rospy.logerr("Didn't get wheel odometry message. Docking failed.")
+            secs, _ = (self.node.get_clock().now() - time_start).seconds_nanoseconds()
+            if secs > self.timeout:
+                self.node.get_logger().error("Didn't get wheel odometry message. Docking failed.")
                 ud.action_result.result = (
-                    f"{self.state_log_name}: wheel odometry not working. Docking failed."
+                    f"{self.state_log_name}: No odom data. Docking failed."
                 )
-                self.wheel_odom_sub.unregister()
                 return "odometry_not_working"
 
             rate.sleep()
-
-        self.cmd_vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
 
         target_pose: PyKDL.Frame = ud.target_pose
         # calculating route left
@@ -169,9 +173,6 @@ class BaseDockAreaState(smach.State):
         if outcome:
             ud.action_result.result = f"{self.state_log_name}: state preempted."
             return "preempted"
-
-        self.cmd_vel_pub.unregister()
-        self.wheel_odom_sub.unregister()
 
         # passing the data to next state
         if self.output_len > 0:
@@ -199,10 +200,8 @@ class BaseDockAreaState(smach.State):
         """Function called when the state catches preemption request.
         Removes all the publishers and subscribers of the state.
         """
-        rospy.logwarn(f"Preemption request handling for {self.state_log_name} state")
+        self.node.get_logger().warn(f"Preemption request handling for {self.state_log_name} state")
         self.cmd_vel_pub.publish(Twist())
-        self.cmd_vel_pub.unregister()
-        self.wheel_odom_sub.unregister()
         return super().service_preempt()
 
 
@@ -213,31 +212,25 @@ class RotateToDockArea(BaseDockAreaState):
 
     def __init__(
         self,
-        timeout=3,
-        speed_min=0.1,
-        speed_max=0.4,
-        angle_min=0.05,
-        angle_max=1.05,
-        epsilon=0.1,
-        angle=True,
-        name="Rotate Towards Area",
+        node: rclpy.node.Node,
+        timeout: int = 3,
+        speed_min: float = 0.1,
+        speed_max: float = 0.4,
+        angle_min: float = 0.05,
+        angle_max: float = 1.05,
+        epsilon: float = 0.1,
+        angle: bool = True,
+        name: str = "Rotate Towards Area",
     ):
-        if rospy.has_param("~rotate_to_dock_area/timeout"):
-            timeout = rospy.get_param("~rotate_to_dock_area/timeout", timeout)
-        else:
-            timeout = rospy.get_param("~timeout", timeout)
-
-        if rospy.has_param("~rotate_to_dock_area/epsilon"):
-            epsilon = rospy.get_param("~rotate_to_dock_area/epsilon", epsilon)
-        else:
-            epsilon = rospy.get_param("~epsilon", epsilon)
-
-        speed_min = rospy.get_param("~rotate_to_dock_area/speed_min", speed_min)
-        speed_max = rospy.get_param("~rotate_to_dock_area/speed_max", speed_max)
-        angle_min = rospy.get_param("~rotate_to_dock_area/angle_min", angle_min)
-        angle_max = rospy.get_param("~rotate_to_dock_area/angle_max", angle_max)
+        timeout = node.declare_parameter("rotate_to_dock_area/timeout", timeout).value
+        epsilon = node.declare_parameter("rotate_to_dock_area/epsilon", epsilon).value
+        speed_min = node.declare_parameter("rotate_to_dock_area/speed_min", speed_min).value
+        speed_max = node.declare_parameter("rotate_to_dock_area/speed_max", speed_max).value
+        angle_min = node.declare_parameter("rotate_to_dock_area/angle_min", angle_min).value
+        angle_max = node.declare_parameter("rotate_to_dock_area/angle_max", angle_max).value
 
         super().__init__(
+            node,
             timeout=timeout,
             speed_min=speed_min,
             speed_max=speed_max,
@@ -262,32 +255,25 @@ class RideToDockArea(BaseDockAreaState):
 
     def __init__(
         self,
-        timeout=3,
-        speed_min=0.05,
-        speed_max=0.4,
-        distance_min=0.1,
-        distance_max=0.5,
-        epsilon=0.1,
+        node: rclpy.node.Node,
+        timeout: int = 3,
+        speed_min: float = 0.05,
+        speed_max: float = 0.4,
+        distance_min: float = 0.1,
+        distance_max: float = 0.5,
+        epsilon: float = 0.1,
         angle=False,
         name="Ride To Area",
     ):
-
-        if rospy.has_param("~ride_to_dock_area/timeout"):
-            timeout = rospy.get_param("~ride_to_dock_area/timeout", timeout)
-        else:
-            timeout = rospy.get_param("~timeout", timeout)
-
-        if rospy.has_param("~ride_to_dock_area/epsilon"):
-            epsilon = rospy.get_param("~ride_to_dock_area/epsilon", epsilon)
-        else:
-            epsilon = rospy.get_param("~epsilon", epsilon)
-
-        speed_min = rospy.get_param("~ride_to_dock_area/speed_min", speed_min)
-        speed_max = rospy.get_param("~ride_to_dock_area/speed_max", speed_max)
-        distance_min = rospy.get_param("~ride_to_dock_area/distance_min", distance_min)
-        distance_max = rospy.get_param("~ride_to_dock_area/distance_max", distance_max)
+        timeout = node.declare_parameter("ride_to_dock_area/timeout", timeout).value
+        epsilon = node.declare_parameter("ride_to_dock_area/epsilon", epsilon).value
+        speed_min = node.declare_parameter("ride_to_dock_area/speed_min", speed_min).value
+        speed_max = node.declare_parameter("ride_to_dock_area/speed_max", speed_max).value
+        distance_min = node.declare_parameter("ride_to_dock_area/distance_min", distance_min).value
+        distance_max = node.declare_parameter("ride_to_dock_area/distance_max", distance_max).value
 
         super().__init__(
+            node,
             timeout=timeout,
             speed_min=speed_min,
             speed_max=speed_max,
@@ -311,32 +297,28 @@ class RotateToBoard(BaseDockAreaState):
 
     def __init__(
         self,
-        output_keys=[],
-        timeout=3,
-        speed_min=0.1,
-        speed_max=0.4,
-        angle_min=0.05,
-        angle_max=1.05,
-        epsilon=0.1,
-        angle=True,
-        name="Rotate Towards Board",
+        node: rclpy.node.Node,
+        output_keys: List[str] = None,
+        timeout: int = 3,
+        speed_min: float = 0.1,
+        speed_max: float = 0.4,
+        angle_min: float = 0.05,
+        angle_max: float = 1.05,
+        epsilon: float = 0.1,
+        angle: bool = True,
+        name: str = "Rotate Towards Board",
     ):
-        if rospy.has_param("~rotate_to_board/timeout"):
-            timeout = rospy.get_param("~rotate_to_board/timeout", timeout)
-        else:
-            timeout = rospy.get_param("~timeout", timeout)
-
-        if rospy.has_param("~rotate_to_board/epsilon"):
-            epsilon = rospy.get_param("~rotate_to_board/epsilon", epsilon)
-        else:
-            epsilon = rospy.get_param("~epsilon", epsilon)
-
-        speed_min = rospy.get_param("~rotate_to_board/speed_min", speed_min)
-        speed_max = rospy.get_param("~rotate_to_board/speed_max", speed_max)
-        angle_min = rospy.get_param("~rotate_to_board/angle_min", angle_min)
-        angle_max = rospy.get_param("~rotate_to_board/angle_max", angle_max)
+        if output_keys is None:
+            output_keys = []
+        timeout = node.declare_parameter("rotate_to_board/timeout", timeout).value
+        epsilon = node.declare_parameter("rotate_to_board/epsilon", epsilon).value
+        speed_min = node.declare_parameter("rotate_to_board/speed_min", speed_min).value
+        speed_max = node.declare_parameter("rotate_to_board/speed_max", speed_max).value
+        angle_min = node.declare_parameter("rotate_to_board/angle_min", angle_min).value
+        angle_max = node.declare_parameter("rotate_to_board/angle_max", angle_max).value
 
         super().__init__(
+            node,
             output_keys=output_keys,
             timeout=timeout,
             speed_min=speed_min,
