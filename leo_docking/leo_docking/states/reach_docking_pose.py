@@ -300,17 +300,16 @@ class RotateToDockingPoint(BaseDockingState):
         angular: bool = True,
         name: str = "Rotate To Docking Point",
     ):
-        timeout = node.declare_parameter("rotate_to_docking_point/timeout", timeout).value
-        epsilon = node.declare_parameter("rotate_to_docking_point/epsilon", epsilon).value
-        speed_min = node.declare_parameter("rotate_to_docking_point/speed_min", speed_min).value
-        speed_max = node.declare_parameter("rotate_to_docking_point/speed_max", speed_max).value
-        angle_min = node.declare_parameter("rotate_to_docking_point/angle_min", angle_min).value
-        angle_max = node.declare_parameter("rotate_to_docking_point/angle_max", angle_max).value
-        docking_point_distance = node.declare_parameter("docking_point_distance", docking_point_distance).value
+        timeout = node.get_parameter("rotate_to_docking_point/timeout").value
+        epsilon = node.get_parameter("rotate_to_docking_point/epsilon").value
+        speed_min = node.get_parameter("rotate_to_docking_point/speed_min").value
+        speed_max = node.get_parameter("rotate_to_docking_point/speed_max").value
+        angle_min = node.get_parameter("rotate_to_docking_point/angle_min").value
+        angle_max = node.get_parameter("rotate_to_docking_point/angle_max").value
         self.min_distance = node.declare_parameter(
             "rotate_to_docking_point/min_docking_point_distance", min_docking_point_distance
         ).value
-        debug = node.declare_parameter("debug", debug).value
+        debug = node.get_parameter("debug").value
 
         super().__init__(
             node,
@@ -375,8 +374,8 @@ class ReachDockingPoint(BaseDockingState):
         speed_max = node.declare_parameter("reach_docking_point/speed_max", speed_max).value
         dist_min = node.declare_parameter("reach_docking_point/distance_min", dist_min).value
         dist_max = node.declare_parameter("reach_docking_point/distance_max", dist_max).value
-        docking_point_distance = node.declare_parameter("docking_point_distance", docking_point_distance).value
-        debug = node.declare_parameter("debug", debug).value
+        docking_point_distance = node.get_parameter("docking_point_distance").value
+        debug = node.get_parameter("debug").value
 
         super().__init__(
             node,
@@ -481,14 +480,14 @@ class ReachDockingOrientation(BaseDockingState):
         angular: bool = True,
         name: str = "Reach Dockin Orientation",
     ):
-        timeout = node.declare_parameter("rotate_to_docking_point/timeout", timeout).value
-        epsilon = node.declare_parameter("rotate_to_docking_point/epsilon", epsilon).value
-        speed_min = node.declare_parameter("rotate_to_docking_point/speed_min", speed_min).value
-        speed_max = node.declare_parameter("rotate_to_docking_point/speed_max", speed_max).value
-        angle_min = node.declare_parameter("rotate_to_docking_point/angle_min", angle_min).value
-        angle_max = node.declare_parameter("rotate_to_docking_point/angle_max", angle_max).value
-        docking_point_distance = node.declare_parameter("docking_point_distance", docking_point_distance).value
-        debug = node.declare_parameter("debug", debug).value
+        timeout = node.get_parameter("rotate_to_docking_point/timeout").value
+        epsilon = node.get_parameter("rotate_to_docking_point/epsilon").value
+        speed_min = node.get_parameter("rotate_to_docking_point/speed_min").value
+        speed_max = node.get_parameter("rotate_to_docking_point/speed_max").value
+        angle_min = node.get_parameter("rotate_to_docking_point/angle_min").value
+        angle_max = node.get_parameter("rotate_to_docking_point/angle_max").value
+        docking_point_distance = node.get_parameter("docking_point_distance").value
+        debug = node.get_parameter("debug").value
 
         super().__init__(
             node,

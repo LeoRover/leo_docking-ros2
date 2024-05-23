@@ -111,7 +111,7 @@ class CheckArea(smach.State):
                 self.service_preempt()
                 ud.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
-            secs, _ = (self.node.get_clock().now() - time_start).seconds_nanoseconds()
+            secs = (self.node.get_clock().now() - time_start).nanoseconds//1e9
             if secs > self.timeout:
                 self.node.get_logger().error(f"Board (id: {self.board_id}) lost. Docking failed.")
                 ud.action_result.result = (

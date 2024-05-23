@@ -166,6 +166,14 @@ def create_state_machine(node) -> smach.StateMachine:
 class DockingServer(rclpy.node.Node):
     def __init__(self):
         super().__init__("docking_server")
+        self.declare_parameter("docking_point_distance", 0.6)
+        self.declare_parameter("debug", True)
+        self.declare_parameter("rotate_to_docking_point/timeout", 3)
+        self.declare_parameter("rotate_to_docking_point/epsilon", 0.01)
+        self.declare_parameter("rotate_to_docking_point/speed_min", 0.1)
+        self.declare_parameter("rotate_to_docking_point/speed_max", 0.4)
+        self.declare_parameter("rotate_to_docking_point/angle_min", 0.05)
+        self.declare_parameter("rotate_to_docking_point/angle_max", 1.0)
         self._state_machine = create_state_machine(self)
 
         self._action_server_wrapper = ActionServerWrapper(
@@ -188,7 +196,6 @@ class DockingServer(rclpy.node.Node):
 
     def start(self):
         self._smach_introspection_server.start()
-        self._action_server_wrapper.run_server()
 
     def stop(self):
         self._smach_introspection_server.stop()

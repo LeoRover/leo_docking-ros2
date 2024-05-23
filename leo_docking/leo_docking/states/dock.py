@@ -21,7 +21,7 @@ from leo_docking.utils import (
     translate,
     normalize_board,
 )
-from .reach_docking_pose import BaseDockingState
+from leo_docking.states.reach_docking_pose import BaseDockingState
 
 
 class Dock(BaseDockingState):
@@ -58,7 +58,7 @@ class Dock(BaseDockingState):
         self.node = node
         self.timeout = self.node.declare_parameter("dock/timeout", timeout).value
         epsilon = self.node.declare_parameter("dock/epsilon", epsilon).value
-        debug = self.node.declare_parameter("debug", debug).value
+        debug = self.node.get_parameter("debug").value
         speed_min = self.node.declare_parameter("dock/speed_min", speed_min).value
         speed_max = self.node.declare_parameter("dock/speed_max", speed_max).value
         route_min = self.node.declare_parameter("dock/distance_min", route_min).value
@@ -67,6 +67,7 @@ class Dock(BaseDockingState):
         self.buff_size = self.node.declare_parameter("effort_buffer_size", effort_buffer_size).value
 
         super().__init__(
+            node,
             timeout=timeout,
             speed_min=speed_min,
             speed_max=speed_max,
