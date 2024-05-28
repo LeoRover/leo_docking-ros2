@@ -12,10 +12,8 @@ class StartState(smach.State):
 
     def __init__(
         self,
-        node: rclpy.node.Node,
         outcomes: Optional[List[str]] = None,
         input_keys: Optional[List[str]] = None,
-        timeout: int = 3,
         name: str = "Start",
     ):
         if outcomes is None:
@@ -27,6 +25,7 @@ class StartState(smach.State):
         self.timeout = self.node.declare_parameter("start_state/timeout", timeout).value
 
         self.board_flag: Event = Event()
+        self.board_id = None
 
         self.state_log_name = name
 
@@ -58,11 +57,11 @@ class StartState(smach.State):
         self.node.get_logger().warning(f"Preemption request handling for '{self.state_log_name}' state.")
         return super().service_preempt()
 
-    def execute(self, ud):
+    def execute(self, user_data):
         """Main state method, executed automatically on state entered"""
         self.reset_state()
 
-        self.board_id = ud.action_goal.board_id
+        self.board_id = user_data.action_goal.board_id
         self.node.get_logger().info(
             f"Waiting for board detection. Required board_id: {self.board_id}"
         )
@@ -72,19 +71,19 @@ class StartState(smach.State):
         while not self.board_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
-                ud.action_result.result = f"{self.state_log_name}: state preempted."
+                user_data.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
             secs = (self.node.get_clock().now() - time_start).nanoseconds//1e9
             if secs > self.timeout:
                 self.node.get_logger().error("Didn't find a board. Docking failed.")
-                ud.action_result.result = (
+                user_data.action_result.result = (
                     f"{self.state_log_name}: didn't find a board. Docking failed."
                 )
                 return "board_not_found"
 
             rate.sleep()
 
-        ud.action_feedback.current_state = (
+        user_data.action_feedback.current_state = (
             f"{self.state_log_name}: board with id: {self.board_id} found. "
             f"Proceeding to 'Check Area' state."
         )

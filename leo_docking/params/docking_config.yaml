@@ -17,8 +17,8 @@ docking_server:
 
 
     # -------------------------------------------- CHECK AREA PARAMS ----------------------------------
-    threshold_angle: 0.17      # half of angle specifying docking area (in radians)
-    docking_distance: 2.0      # distance of the target point in docking area from the docking base
+    check_area/threshold_angle: 0.17      # half of angle specifying docking area (in radians)
+    check_area/docking_distance: 2.0      # distance of the target point in docking area from the docking base
     # check_area/timeout: 3.0  # specific timeout for "CheckArea" state blocking events
 
 
@@ -91,4 +91,4 @@ docking_server:
     dock/bias_speed_max: 0.3     # maximum angular speed for the correction movement
     dock/bias_min: 0.01          # the angle (in radians) to correct for which the rover will rotate with the minimal speed
     dock/bias_max: 0.1           # the angle (in radians) to correct for which the rover will rotate with the maximum speed
-    # docking_rover/timeout: 3.0         # specific timeout for "DockingRover" state blocking events
+    # dock/timeout: 3.0         # specific timeout for "DockingRover" state blocking events
