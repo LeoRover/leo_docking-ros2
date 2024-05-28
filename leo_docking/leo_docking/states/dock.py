@@ -6,6 +6,7 @@ import math
 import numpy as np
 import time
 import rclpy
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
 from rclpy.time import Time
 
 from aruco_opencv_msgs.msg import BoardPose
@@ -94,11 +95,12 @@ class Dock(BaseDockingState):
         self.bias_speed_max = self.node.declare_parameter("~dock/bias_speed_max", bias_speed_max).value
         self.bias_direction = 0.0
 
+        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE)
         self.battery_sub = self.node.create_subscription(
-            Float32, "firmware/battery", self.battery_callback, qos_profile=1
+            Float32, "firmware/battery", self.battery_callback, qos_profile=qos
         )
         self.joint_state_sub = self.node.create_subscription(
-            JointState, "joint_states", self.effort_callback, qos_profile=1
+            JointState, "joint_states", self.effort_callback, qos_profile=qos
         )
 
         self.reset_state()

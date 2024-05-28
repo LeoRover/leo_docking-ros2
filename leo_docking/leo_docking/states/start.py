@@ -1,6 +1,7 @@
 from threading import Event
 
 import rclpy
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 import smach
 
 from aruco_opencv_msgs.msg import ArucoDetection
@@ -29,9 +30,9 @@ class StartState(smach.State):
         self.board_flag: Event = Event()
 
         self.state_log_name = name
-
+        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE)
         self.board_sub = self.node.create_subscription(
-            ArucoDetection, "aruco_detections", self.board_callback, qos_profile=1
+            ArucoDetection, "/aruco_detections", self.board_callback, qos_profile=qos
         )
         self.reset_state()
 

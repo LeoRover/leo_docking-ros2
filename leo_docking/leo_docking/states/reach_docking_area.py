@@ -15,6 +15,7 @@ from leo_docking.utils import (
     angle_done_from_odom,
     distance_done_from_odom,
 )
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
 
 
 class BaseDockAreaState(smach.State):
@@ -61,10 +62,11 @@ class BaseDockAreaState(smach.State):
         self.route_done = 0.0
         self.odom_reference = None
 
+        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE)
         self.wheel_odom_sub = self.node.create_subscription(
-            Odometry, "wheel_odom_with_covariance", self.wheel_odom_callback, qos_profile=1
+            Odometry, "wheel_odom_with_covariance", self.wheel_odom_callback, qos_profile=qos
         )
-        self.cmd_vel_pub = self.node.create_publisher(Twist, "cmd_vel", qos_profile=1)
+        self.cmd_vel_pub = self.node.create_publisher(Twist, "cmd_vel", qos_profile=qos)
 
         self.reset_state()
 

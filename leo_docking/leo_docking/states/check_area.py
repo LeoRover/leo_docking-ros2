@@ -15,6 +15,8 @@ from leo_docking.utils import (
 )
 from typing import List, Optional
 
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
+
 
 class CheckArea(smach.State):
     """State responsible for checking the rover position regarding docking area
@@ -52,8 +54,9 @@ class CheckArea(smach.State):
         self.board_flag = Event()
         self.state_log_name = name
 
+        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE)
         self.board_sub = self.node.create_subscription(
-            ArucoDetection, "aruco_detections", self.board_callback, qos_profile=1
+            ArucoDetection, "/aruco_detections", self.board_callback, qos_profile=qos
         )
 
         self.reset_state()
