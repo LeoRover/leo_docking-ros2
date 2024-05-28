@@ -126,7 +126,7 @@ class Dock(BaseDockingState):
             if self.node.get_clock().now() < self.end_time:
                 self.acc_data += data.data
                 self.counter += 1
-            elif not self.battery_reference:
+            elif not self.battery_reference and self.counter != 0:
                 self.battery_reference = self.acc_data / float(self.counter)
             else:
                 # battery average level too high to notice difference
