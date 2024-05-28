@@ -2,7 +2,7 @@
 import rclpy
 import smach
 import smach_ros
-from rclpy.executors import SingleThreadedExecutor
+from rclpy.executors import MultiThreadedExecutor
 from smach_ros import ActionServerWrapper
 from leo_docking_msgs.action import PerformDocking
 
@@ -206,7 +206,7 @@ if __name__ == "__main__":
     node = DockingServer()
     node.start()
 
-    executor = SingleThreadedExecutor()
+    executor = MultiThreadedExecutor()
     executor.add_node(node)
     try:
         executor.spin()
