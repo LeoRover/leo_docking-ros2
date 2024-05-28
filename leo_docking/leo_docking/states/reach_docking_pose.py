@@ -21,6 +21,7 @@ from leo_docking.utils import (
     translate,
     normalize_board,
 )
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
 
 
 class BaseDockingState(smach.State):
@@ -79,14 +80,15 @@ class BaseDockingState(smach.State):
         self.seq = 0
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(node=self.node)
 
+        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE)
         self.board_sub = self.node.create_subscription(
-            ArucoDetection, "aruco_detections", self.board_callback, qos_profile=1
+            ArucoDetection, "/aruco_detections", self.board_callback, qos_profile=qos
         )
         self.wheel_odom_sub = self.node.create_subscription(
-            Odometry, "wheel_odom_with_covariance", self.wheel_odom_callback, qos_profile=1
+            Odometry, "/wheel_odom_with_covariance", self.wheel_odom_callback, qos_profile=qos
         )
 
-        self.vel_pub = self.node.create_publisher(Twist, "cmd_vel", qos_profile=1)
+        self.vel_pub = self.node.create_publisher(Twist, "/cmd_vel", qos_profile=qos)
 
         self.reset_state()
 
