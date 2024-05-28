@@ -88,6 +88,7 @@ class BaseDockingState(smach.State):
             Odometry, "/wheel_odom_with_covariance", self.wheel_odom_callback, qos_profile=qos
         )
 
+        qos = QoSProfile(reliability=QoSReliabilityPolicy.RELIABLE, durability=QoSDurabilityPolicy.VOLATILE, depth=1)
         self.vel_pub = self.node.create_publisher(Twist, "/cmd_vel", qos_profile=qos)
 
         self.reset_state()

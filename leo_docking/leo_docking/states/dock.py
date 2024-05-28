@@ -78,7 +78,7 @@ class Dock(BaseDockingState):
             debug=debug,
             name=name,
         )
-
+        self.end_time = self.node.get_clock().now()
         self.battery_lock: Lock = Lock()
         self.battery_diff = self.node.declare_parameter("~battery_diff", battery_diff).value
         self.battery_threshold = self.node.declare_parameter("max_battery_average", max_bat_average).value
