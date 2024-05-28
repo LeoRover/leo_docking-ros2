@@ -54,7 +54,7 @@ class Dock(BaseDockingState):
         effort_summary_threshold: float = 2.0,
         effort_buffer_size: float = 10,
         motor_cd_time: float = 2.0,
-        name:str = "Dock",
+        name: str = "Dock",
     ):
         self.node = node
         self.timeout = self.node.declare_parameter("dock/timeout", timeout).value
@@ -78,6 +78,7 @@ class Dock(BaseDockingState):
             debug=debug,
             name=name,
         )
+        self.executing = False
         self.end_time = self.node.get_clock().now()
         self.battery_lock: Lock = Lock()
         self.battery_diff = self.node.declare_parameter("~battery_diff", battery_diff).value
@@ -123,6 +124,8 @@ class Dock(BaseDockingState):
         Calculates the battery average threshold and checks the battery stop condition.
         """
         with self.battery_lock:
+            if not self.executing:
+                return
             if self.node.get_clock().now() < self.end_time:
                 self.acc_data += data.data
                 self.counter += 1
@@ -159,7 +162,7 @@ class Dock(BaseDockingState):
 
     def movement_loop(self) -> Optional[str]:
         """Function performing rover movement; invoked in the "execute" method of the state."""
-
+        self.executing = True
         self.node.get_logger().info("Waiting for motors effort and battery voltage to drop.")
         time.sleep(self.motor_cd_time)
 
@@ -217,7 +220,7 @@ class Dock(BaseDockingState):
 
                 self.vel_pub.publish(msg)
             time.sleep(0.1)
-
+        self.executing = False
         self.vel_pub.publish(Twist())
         return None
 
@@ -238,4 +241,5 @@ class Dock(BaseDockingState):
         self.bias_done = angle_done_from_odom(odom_reference, current_odom)
 
     def service_preempt(self):
+        self.executing = False
         return super().service_preempt()
