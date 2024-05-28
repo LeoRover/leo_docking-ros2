@@ -30,7 +30,7 @@ class StartState(smach.State):
         self.board_flag: Event = Event()
 
         self.state_log_name = name
-        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE)
+        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE, depth=1)
         self.board_sub = self.node.create_subscription(
             ArucoDetection, "/aruco_detections", self.board_callback, qos_profile=qos
         )

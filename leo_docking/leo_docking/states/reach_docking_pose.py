@@ -80,7 +80,7 @@ class BaseDockingState(smach.State):
         self.seq = 0
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(node=self.node)
 
-        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE)
+        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE, depth=1)
         self.board_sub = self.node.create_subscription(
             ArucoDetection, "/aruco_detections", self.board_callback, qos_profile=qos
         )

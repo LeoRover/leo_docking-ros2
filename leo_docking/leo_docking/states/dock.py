@@ -95,7 +95,7 @@ class Dock(BaseDockingState):
         self.bias_speed_max = self.node.declare_parameter("~dock/bias_speed_max", bias_speed_max).value
         self.bias_direction = 0.0
 
-        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE)
+        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE, depth=1)
         self.battery_sub = self.node.create_subscription(
             Float32, "firmware/battery", self.battery_callback, qos_profile=qos
         )
