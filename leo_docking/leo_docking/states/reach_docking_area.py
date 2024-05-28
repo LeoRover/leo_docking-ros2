@@ -62,7 +62,7 @@ class BaseDockAreaState(smach.State):
         self.route_done = 0.0
         self.odom_reference = None
 
-        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE)
+        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE, depth=1)
         self.wheel_odom_sub = self.node.create_subscription(
             Odometry, "wheel_odom_with_covariance", self.wheel_odom_callback, qos_profile=qos
         )
