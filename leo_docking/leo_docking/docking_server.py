@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import rclpy
-from rclpy.executors import SingleThreadedExecutor
+from rclpy.executors import MultiThreadedExecutor
 from smach_ros import ActionServerWrapper, IntrospectionServer
 
 from leo_docking.states.docking_state_machine import DockingStateMachine
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     node = DockingServer()
     node.start()
 
-    executor = SingleThreadedExecutor()
+    executor = MultiThreadedExecutor()
     executor.add_node(node)
     try:
         executor.spin()
