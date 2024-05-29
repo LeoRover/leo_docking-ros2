@@ -62,12 +62,7 @@ class BaseDockAreaState(smach.State):
         self.route_done = 0.0
         self.odom_reference = None
 
-        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE, depth=1)
-        self.wheel_odom_sub = self.node.create_subscription(
-            Odometry, "wheel_odom_with_covariance", self.wheel_odom_callback, qos_profile=qos
-        )
-        qos = QoSProfile(reliability=QoSReliabilityPolicy.RELIABLE, durability=QoSDurabilityPolicy.VOLATILE, depth=1)
-        self.cmd_vel_pub = self.node.create_publisher(Twist, "/cmd_vel", qos_profile=qos)
+        self.publish_cmd_vel_cb = None
 
         self.reset_state()
 
@@ -140,10 +135,10 @@ class BaseDockAreaState(smach.State):
                     self.service_preempt()
                     return "preempted"
 
-                self.cmd_vel_pub.publish(msg)
+                self.publish_cmd_vel_cb(msg)
             rate.sleep()
 
-        self.cmd_vel_pub.publish(Twist())
+        self.publish_cmd_vel_cb(Twist())
 
         return None
 
@@ -187,7 +182,7 @@ class BaseDockAreaState(smach.State):
         )
         return "succeeded"
 
-    def wheel_odom_callback(self, data: Odometry) -> None:
+    def wheel_odom_cb(self, data: Odometry) -> None:
         """Function called every time, there is new Odometry message published on the topic.
         Calculates the route done from the first message that it got, and the current one.
         """
@@ -204,7 +199,7 @@ class BaseDockAreaState(smach.State):
         Removes all the publishers and subscribers of the state.
         """
         self.node.get_logger().warn(f"Preemption request handling for {self.state_log_name} state")
-        self.cmd_vel_pub.publish(Twist())
+        self.publish_cmd_vel_cb(Twist())
         return super().service_preempt()
 
 

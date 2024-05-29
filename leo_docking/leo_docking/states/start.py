@@ -29,17 +29,13 @@ class StartState(smach.State):
         self.board_id = None
 
         self.state_log_name = name
-        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE, depth=1)
-        self.board_sub = self.node.create_subscription(
-            ArucoDetection, "/aruco_detections", self.board_callback, qos_profile=qos
-        )
         self.reset_state()
 
     def reset_state(self):
         self.board_id = None
         self.board_flag.clear()
 
-    def board_callback(self, data: ArucoDetection):
+    def aruco_detection_cb(self, data: ArucoDetection):
         """Function called every time there is new ArucoDetection message published on the topic.
         Checks if the rover can see board with the desired id (passed as action goal).
         """

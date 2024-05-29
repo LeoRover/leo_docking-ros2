@@ -80,16 +80,7 @@ class BaseDockingState(smach.State):
         self.seq = 0
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(node=self.node)
 
-        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE, depth=1)
-        self.board_sub = self.node.create_subscription(
-            ArucoDetection, "/aruco_detections", self.board_callback, qos_profile=qos
-        )
-        self.wheel_odom_sub = self.node.create_subscription(
-            Odometry, "/wheel_odom_with_covariance", self.wheel_odom_callback, qos_profile=qos
-        )
-
-        qos = QoSProfile(reliability=QoSReliabilityPolicy.RELIABLE, durability=QoSDurabilityPolicy.VOLATILE, depth=1)
-        self.vel_pub = self.node.create_publisher(Twist, "/cmd_vel", qos_profile=qos)
+        self.publish_cmd_vel_cb = None
 
         self.reset_state()
 
@@ -144,10 +135,10 @@ class BaseDockingState(smach.State):
                     self.service_preempt()
                     return "preempted"
 
-                self.vel_pub.publish(msg)
+                self.publish_cmd_vel_cb(msg)
             rate.sleep()
 
-        self.vel_pub.publish(Twist())
+        self.publish_cmd_vel_cb(Twist())
         return None
 
     def calculate_route_done(
@@ -166,7 +157,7 @@ class BaseDockingState(smach.State):
         else:
             self.route_done = distance_done_from_odom(odom_reference, current_odom)
 
-    def board_callback(self, data: ArucoDetection) -> None:
+    def aruco_detection_cb(self, data: ArucoDetection) -> None:
         """Function called every time, there is new ArucoDetection message published on the topic.
         Calculates the route left from the detected board, set's odometry reference, and
         (if specified), sends debug tf's so you can visualize calculated target position in rviz.
@@ -216,7 +207,7 @@ class BaseDockingState(smach.State):
 
                 break
 
-    def wheel_odom_callback(self, data: Odometry) -> None:
+    def wheel_odom_cb(self, data: Odometry) -> None:
         """Function called every time, there is new Odometry message published on the topic.
         Calculates the route done from the referance message saved in board callback,
         and the current odometry pose.
@@ -278,7 +269,7 @@ class BaseDockingState(smach.State):
         Removes all the publishers and subscribers of the state.
         """
         self.node.get_logger().error(f"Preemption request handling for {self.state_log_name} state")
-        self.vel_pub.publish(Twist())
+        self.publish_cmd_vel_cb(Twist())
         return super().service_preempt()
 
 
@@ -439,10 +430,10 @@ class ReachDockingPoint(BaseDockingState):
                     self.service_preempt()
                     return "preempted"
 
-                self.vel_pub.publish(msg)
+                self.publish_cmd_vel_cb(msg)
             rate.sleep()
 
-        self.vel_pub.publish(Twist())
+        self.publish_cmd_vel_cb(Twist())
         return None
 
     def calculate_route_left(self, board: BoardPose):

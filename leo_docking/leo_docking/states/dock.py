@@ -96,13 +96,7 @@ class Dock(BaseDockingState):
         self.bias_speed_max = self.node.declare_parameter("~dock/bias_speed_max", bias_speed_max).value
         self.bias_direction = 0.0
 
-        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE, depth=1)
-        self.battery_sub = self.node.create_subscription(
-            Float32, "firmware/battery", self.battery_callback, qos_profile=qos
-        )
-        self.joint_state_sub = self.node.create_subscription(
-            JointState, "joint_states", self.effort_callback, qos_profile=qos
-        )
+        self.publish_cmd_vel_cb = None
 
         self.reset_state()
 
@@ -119,7 +113,7 @@ class Dock(BaseDockingState):
 
         return super().reset_state()
 
-    def battery_callback(self, data: Float32) -> None:
+    def battery_cb(self, data: Float32) -> None:
         """Function called every time, there is new message published on the battery topic.
         Calculates the battery average threshold and checks the battery stop condition.
         """
@@ -139,7 +133,7 @@ class Dock(BaseDockingState):
                 if data.data > self.battery_reference + self.battery_diff:
                     self.charging = True
 
-    def effort_callback(self, data: JointState) -> None:
+    def effort_cb(self, data: JointState) -> None:
         """Function called every time, there is new JointState message published on the topic.
         Calculates the sum of efforts on the wheel motors, and checks the wheel effort stop
         condition.
@@ -218,10 +212,10 @@ class Dock(BaseDockingState):
                     self.service_preempt()
                     return "preempted"
 
-                self.vel_pub.publish(msg)
+                self.publish_cmd_vel_cb(msg)
             time.sleep(0.1)
         self.executing = False
-        self.vel_pub.publish(Twist())
+        self.publish_cmd_vel_cb(Twist())
         return None
 
     def calculate_route_left(self, board: BoardPose) -> None:

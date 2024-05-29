@@ -54,11 +54,6 @@ class CheckArea(smach.State):
         self.board_flag = Event()
         self.state_log_name = name
 
-        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE, depth=1)
-        self.board_sub = self.node.create_subscription(
-            ArucoDetection, "/aruco_detections", self.board_callback, qos_profile=qos
-        )
-
         self.reset_state()
 
     def reset_state(self):
@@ -66,7 +61,7 @@ class CheckArea(smach.State):
         self.board_flag.clear()
         self.board = None
 
-    def board_callback(self, data: ArucoDetection):
+    def aruco_detection_cb(self, data: ArucoDetection):
         """Function called every time there is new ArucoDetection message published on the topic.
         Saves the detected board's position for further calculations.
         """
