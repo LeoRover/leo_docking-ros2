@@ -1,18 +1,19 @@
 from threading import Event
 
-import rclpy
-from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 import smach
 
 from aruco_opencv_msgs.msg import ArucoDetection
 from typing import List, Optional
 
+from leo_docking.leo_docking.state_machine_params import GlobalParams, StartParams
 
 class StartState(smach.State):
     """State checking if the board is seen by the rover"""
 
     def __init__(
         self,
+        global_params: GlobalParams,
+        start_params: StartParams,
         outcomes: Optional[List[str]] = None,
         input_keys: Optional[List[str]] = None,
         name: str = "Start",
@@ -22,8 +23,8 @@ class StartState(smach.State):
         if input_keys is None:
             input_keys = ["action_goal", "action_feedback", "action_result"]
         super().__init__(outcomes, input_keys)
-        self.node = node
-        self.timeout = self.node.declare_parameter("start_state/timeout", timeout).value
+        self.global_params = global_params
+        self.params = start_params
 
         self.board_flag: Event = Event()
         self.board_id = None
@@ -71,7 +72,7 @@ class StartState(smach.State):
                 user_data.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
             secs = (self.node.get_clock().now() - time_start).nanoseconds//1e9
-            if secs > self.timeout:
+            if secs > self.params.timeout:
                 self.node.get_logger().error("Didn't find a board. Docking failed.")
                 user_data.action_result.result = (
                     f"{self.state_log_name}: didn't find a board. Docking failed."

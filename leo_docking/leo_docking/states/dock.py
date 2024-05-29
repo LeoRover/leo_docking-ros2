@@ -6,7 +6,6 @@ import math
 import numpy as np
 import time
 import rclpy
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
 from rclpy.time import Time
 
 from aruco_opencv_msgs.msg import BoardPose

@@ -15,7 +15,7 @@ from leo_docking.utils import (
 )
 from typing import List, Optional
 
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
+from leo_docking.leo_docking.state_machine_params import GlobalParams, CheckAreaParams
 
 
 class CheckArea(smach.State):
@@ -25,13 +25,11 @@ class CheckArea(smach.State):
 
     def __init__(
         self,
-        node: rclpy.node.Node,
+        global_params: GlobalParams,
+        check_area_params: CheckAreaParams,
         outcomes: Optional[List[str]] = None,
         input_keys: Optional[List[str]] = None,
         output_keys: Optional[List[str]] = None,
-        threshold_angle: float = 0.26,  # 15 degrees
-        docking_distance: float = 2.0,
-        timeout: int = 3,
         name: str = "Check Area",
     ):
         if output_keys is None:
@@ -43,13 +41,10 @@ class CheckArea(smach.State):
         super().__init__(
             outcomes=outcomes, input_keys=input_keys, output_keys=output_keys
         )
+        self.global_params = global_params
+        self.params = check_area_params
         self.board_id = None
         self.board = None
-        self.node = node
-
-        self.threshold_angle = self.node.declare_parameter("threshold_angle", threshold_angle).value
-        self.docking_distance = self.node.declare_parameter("docking_distance", docking_distance).value
-        self.timeout = self.node.declare_parameter("timeout", timeout).value
 
         self.board_flag = Event()
         self.state_log_name = name
@@ -82,7 +77,7 @@ class CheckArea(smach.State):
         Returns:
             True if rover is in the docking area, False otherwise
         """
-        max_value = math.tan(self.threshold_angle) * dist_x
+        max_value = math.tan(self.params.threshold_angle) * dist_x
 
         return dist_y <= max_value
 
@@ -110,7 +105,7 @@ class CheckArea(smach.State):
                 ud.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
             secs = (self.node.get_clock().now() - time_start).nanoseconds//1e9
-            if secs > self.timeout:
+            if secs > self.params.timeout:
                 self.node.get_logger().error(f"Board (id: {self.board_id}) lost. Docking failed.")
                 ud.action_result.result = (
                     f"{self.state_log_name}: board lost. Docking failed."
@@ -131,7 +126,7 @@ class CheckArea(smach.State):
 
         # getting target pose
         point, orientation = get_location_points_from_board(
-            self.board, self.docking_distance
+            self.board, self.params.docking_distance
         )
 
         target_pose = PyKDL.Frame(PyKDL.Rotation.Quaternion(*orientation), point)

@@ -15,7 +15,6 @@ from leo_docking.utils import (
     angle_done_from_odom,
     distance_done_from_odom,
 )
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
 
 
 class BaseDockAreaState(smach.State):

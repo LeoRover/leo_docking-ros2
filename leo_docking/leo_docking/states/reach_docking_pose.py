@@ -21,7 +21,6 @@ from leo_docking.utils import (
     translate,
     normalize_board,
 )
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
 
 
 class BaseDockingState(smach.State):
