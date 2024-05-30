@@ -17,7 +17,7 @@ from leo_docking.utils import (
     angle_done_from_odom,
     distance_done_from_odom,
     translate,
-    normalize_board,
+    normalize_board, LoggerProto,
 )
 from leo_docking.states.reach_docking_pose import BaseDockingState
 from leo_docking.state_machine_params import GlobalParams, DockParams
@@ -37,11 +37,13 @@ class Dock(BaseDockingState):
         global_params: GlobalParams,
         params: DockParams,
         name: str = "Dock",
+        logger: LoggerProto = None,
     ):
         super().__init__(
             global_params,
             params,
             name=name,
+            logger=logger
         )
         self.executing = False
         self.battery_lock: Lock = Lock()
@@ -118,37 +120,37 @@ class Dock(BaseDockingState):
     def movement_loop(self) -> Optional[str]:
         """Function performing rover movement; invoked in the "execute" method of the state."""
         self.executing = True
-        self.node.get_logger().info("Waiting for motors effort and battery voltage to drop.")
+        self.logger.info("Waiting for motors effort and battery voltage to drop.")
         time.sleep(self.global_params.motor_cd_time)
 
         with self.battery_lock:
             self.end_time = self.node.get_clock().now() + Time(seconds=self.global_params.battery_averaging_time)
 
         # waiting for the end of colleting data
-        self.node.get_logger().info("Measuring battery data...")
+        self.logger.info("Measuring battery data...")
         time.sleep(self.global_params.battery_averaging_time)
-        self.node.get_logger().info("Batery voltage average level calculated. Performing docking.")
+        self.logger.info("Batery voltage average level calculated. Performing docking.")
 
         msg = Twist()
 
         while True:
             with self.battery_lock:
                 if self.charging:
-                    self.node.get_logger().info(
+                    self.logger.info(
                         f"Docking stopped. Condition: battery charging detected."
                     )
                     break
 
             with self.effort_lock:
                 if self.effort_stop:
-                    self.node.get_logger().info(
+                    self.logger.info(
                         f"Docking stopped. Condition: wheel motors effort rise detected."
                     )
                     break
 
             with self.route_lock:
                 if self.route_done + self.params.epsilon >= self.route_left:
-                    self.node.get_logger().info(
+                    self.logger.info(
                         f"Docking stopped. Condition: distance to board reached."
                     )
                     break

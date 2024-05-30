@@ -6,7 +6,7 @@
 #  ------------------------------------------------------------------
 
 from __future__ import annotations
-from typing import Tuple
+from typing import Tuple, Protocol
 
 import math
 
@@ -18,6 +18,25 @@ from aruco_opencv_msgs.msg import BoardPose
 from nav_msgs.msg import Odometry
 
 import PyKDL
+
+
+class LoggerProto(Protocol):
+    """Protocol class describing a typical logger object.
+
+    Satisfied by rclpy.impl.rcutils_logger.RcutilsLogger, AKA standard rclpy logger.
+    """
+
+    def debug(self, msg: str) -> None:
+        """Log debug message."""
+
+    def info(self, msg: str) -> None:
+        """Log info message."""
+
+    def warning(self, msg: str) -> None:
+        """Log warning message."""
+
+    def error(self, msg: str) -> None:
+        """Log error message."""
 
 
 def frame_to_pose(frame: PyKDL.Frame) -> Pose:

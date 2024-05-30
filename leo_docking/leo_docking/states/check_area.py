@@ -9,7 +9,7 @@ import PyKDL
 
 from leo_docking.utils import (
     calculate_threshold_distances,
-    get_location_points_from_board,
+    get_location_points_from_board, LoggerProto,
 )
 from typing import List, Optional
 
@@ -28,6 +28,7 @@ class CheckArea(smach.State):
         input_keys: Optional[List[str]] = None,
         output_keys: Optional[List[str]] = None,
         name: str = "Check Area",
+        logger: LoggerProto = None,
     ):
         if output_keys is None:
             output_keys = ["target_pose"]
@@ -45,6 +46,7 @@ class CheckArea(smach.State):
         self.board_flag = Event()
         self.state_log_name = name
 
+        self.logger = logger
         self.reset_state()
 
     def reset_state(self):
@@ -81,7 +83,7 @@ class CheckArea(smach.State):
         """Function called when the state catches preemption request.
         Removes all the publishers and subscribers of the state.
         """
-        self.node.get_logger().warn(f"Preemption request handling for '{self.state_log_name}' state.")
+        self.logger.warning(f"Preemption request handling for '{self.state_log_name}' state.")
         return super().service_preempt()
 
     def execute(self, ud):
@@ -91,7 +93,7 @@ class CheckArea(smach.State):
         self.reset_state()
 
         self.board_id = ud.action_goal.board_id
-        self.node.get_logger().info(f"Waiting for board (id: {self.board_id}) detection.")
+        self.logger.info(f"Waiting for board (id: {self.board_id}) detection.")
 
         rate = self.node.create_rate(10)
         time_start = self.node.get_clock().now()
@@ -102,7 +104,7 @@ class CheckArea(smach.State):
                 return "preempted"
             secs = (self.node.get_clock().now() - time_start).nanoseconds//1e9
             if secs > self.params.timeout:
-                self.node.get_logger().error(f"Board (id: {self.board_id}) lost. Docking failed.")
+                self.logger.error(f"Board (id: {self.board_id}) lost. Docking failed.")
                 ud.action_result.result = (
                     f"{self.state_log_name}: board lost. Docking failed."
                 )

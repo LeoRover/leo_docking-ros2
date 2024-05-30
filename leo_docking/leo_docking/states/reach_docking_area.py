@@ -12,10 +12,10 @@ import PyKDL
 from leo_docking.utils import (
     translate,
     angle_done_from_odom,
-    distance_done_from_odom,
+    distance_done_from_odom, LoggerProto,
 )
 
-from leo_docking.state_machine_params import GlobalParams, RotateToDockAreaParams, RideToDockAreaParams, RotateToBoardParams
+from leo_docking.state_machine_params import RotateToDockAreaParams, RideToDockAreaParams, RotateToBoardParams
 
 
 class BaseDockAreaState(smach.State):
@@ -30,6 +30,7 @@ class BaseDockAreaState(smach.State):
         output_keys: Optional[List[str]] = None,
         angle: bool = True,
         name: str = "",
+        logger: LoggerProto = None,
     ):
         if outcomes is None:
             outcomes = ["succeeded", "odometry_not_working", "preempted"]
@@ -52,6 +53,7 @@ class BaseDockAreaState(smach.State):
 
         self.publish_cmd_vel_cb = None
 
+        self.logger = logger
         self.reset_state()
 
     def reset_state(self):
@@ -155,7 +157,7 @@ class BaseDockAreaState(smach.State):
                 return "preempted"
             secs = (self.node.get_clock().now() - time_start).nanoseconds//1e9
             if secs > self.params.timeout:
-                self.node.get_logger().error("Didn't get wheel odometry message. Docking failed.")
+                self.logger.error("Didn't get wheel odometry message. Docking failed.")
                 ud.action_result.result = (
                     f"{self.state_log_name}: No odom data. Docking failed."
                 )
@@ -198,7 +200,7 @@ class BaseDockAreaState(smach.State):
         """Function called when the state catches preemption request.
         Removes all the publishers and subscribers of the state.
         """
-        self.node.get_logger().warn(f"Preemption request handling for {self.state_log_name} state")
+        self.logger.warning(f"Preemption request handling for {self.state_log_name} state")
         self.publish_cmd_vel_cb(Twist())
         return super().service_preempt()
 
@@ -213,8 +215,9 @@ class RotateToDockArea(BaseDockAreaState):
         local_params: RotateToDockAreaParams,
         angle: bool = True,
         name: str = "Rotate Towards Area",
+        logger: LoggerProto = None,
     ):
-        super().__init__(local_params, angle=angle, name=name)
+        super().__init__(local_params, angle=angle, name=name, logger=logger)
 
     def calculate_route_left(self, target_pose: PyKDL.Frame) -> float:
         position: PyKDL.Vector = target_pose.p
@@ -233,8 +236,9 @@ class RideToDockArea(BaseDockAreaState):
         local_params: RideToDockAreaParams,
         angle: bool = False,
         name="Ride To Area",
+        logger: LoggerProto = None,
     ):
-        super().__init__(local_params, angle=angle, name=name)
+        super().__init__(local_params, angle=angle, name=name, logger=logger)
 
     def calculate_route_left(self, target_pose: PyKDL.Frame) -> float:
         position: PyKDL.Vector = target_pose.p
@@ -253,11 +257,12 @@ class RotateToBoard(BaseDockAreaState):
         output_keys: Optional[List[str]] = None,
         angle: bool = True,
         name: str = "Rotate Towards Board",
+        logger: LoggerProto = None,
     ):
         if output_keys is None:
             output_keys = []
 
-        super().__init__(local_params, output_keys=output_keys, angle=angle, name=name)
+        super().__init__(local_params, output_keys=output_keys, angle=angle, name=name, logger=logger)
 
     def calculate_route_left(self, target_pose: PyKDL.Frame) -> float:
         position: PyKDL.Vector = target_pose.p

@@ -19,7 +19,7 @@ from leo_docking.utils import (
     distance_done_from_odom,
     visualize_position,
     translate,
-    normalize_board,
+    normalize_board, LoggerProto,
 )
 
 
@@ -35,6 +35,7 @@ class BaseDockingState(smach.State):
         input_keys: Optional[List[str]] = None,
         angle: bool = True,
         name: str = "",
+        logger: LoggerProto = None,
     ):
         if outcomes is None:
             outcomes = ["succeeded", "odometry_not_working", "board_lost", "preempted"]
@@ -67,6 +68,7 @@ class BaseDockingState(smach.State):
 
         self.publish_cmd_vel_cb = None
 
+        self.logger = logger
         self.reset_state()
 
     def reset_state(self):
@@ -236,13 +238,13 @@ class BaseDockingState(smach.State):
             if (self.node.get_clock().now() - time_start).to_sec() > self.params.timeout:
 
                 if not self.board_flag.is_set():
-                    self.node.get_logger().error(f"Board (id: {self.board_id}) lost. Docking failed.")
+                    self.logger.error(f"Board (id: {self.board_id}) lost. Docking failed.")
                     ud.action_result.result = (
                         f"{self.state_log_name}: Board lost. Docking failed."
                     )
                     return "board_lost"
                 else:
-                    self.node.get_logger().error("Didn't get wheel odometry message. Docking failed.")
+                    self.logger.error("Didn't get wheel odometry message. Docking failed.")
                     ud.action_result.result = f"{self.state_log_name}: wheel odometry not working. Docking failed."
                     return "odometry_not_working"
 
@@ -265,7 +267,7 @@ class BaseDockingState(smach.State):
         """Function called when the state catches preemption request.
         Removes all the publishers and subscribers of the state.
         """
-        self.node.get_logger().error(f"Preemption request handling for {self.state_log_name} state")
+        self.logger.error(f"Preemption request handling for {self.state_log_name} state")
         self.publish_cmd_vel_cb(Twist())
         return super().service_preempt()
 
@@ -282,12 +284,14 @@ class RotateToDockingPoint(BaseDockingState):
         local_params: RotateToDockingPointParams,
         angular: bool = True,
         name: str = "Rotate To Docking Point",
+        logger: LoggerProto = None,
     ):
         super().__init__(
             global_params,
             local_params,
             angle=angular,
             name=name,
+            logger=logger
         )
 
     def calculate_route_left(self, board: BoardPose):
@@ -300,7 +304,7 @@ class RotateToDockingPoint(BaseDockingState):
             < self.params.min_docking_point_distance
         ):
             self.route_left = 0.0
-            self.node.get_logger().info("Rover to close to the docking point in the beginning of docking process.")
+            self.logger.info("Rover to close to the docking point in the beginning of docking process.")
         else:
             angle = math.atan2(docking_point.y(), docking_point.x())
             self.movement_direction = 1 if angle >= 0 else -1
@@ -320,12 +324,14 @@ class ReachDockingPoint(BaseDockingState):
         local_params: ReachDockingPointParams,
         angular: bool = False,
         name: str = "Reach Docking Point",
+        logger: LoggerProto = None,
     ):
         super().__init__(
             global_params,
             local_params,
             angle=angular,
             name=name,
+            logger=logger
         )
         self.bias_left = 0.0
         self.bias_done = 0.0
@@ -404,12 +410,14 @@ class ReachDockingOrientation(BaseDockingState):
         local_params: ReachDockingOrientationParams,
         angular: bool = True,
         name: str = "Reach Dockin Orientation",
+        logger: LoggerProto = None,
     ):
         super().__init__(
             global_params,
             local_params,
             angle=angular,
             name=name,
+            logger=logger,
         )
 
     def calculate_route_left(self, board: BoardPose):

@@ -11,14 +11,15 @@ from leo_docking.states.reach_docking_pose import (
 from leo_docking.states.dock import Dock
 
 from leo_docking.state_machine_params import StateMachineParams
+from leo_docking.utils import LoggerProto
 
 
 class DockingStateMachine:
-    def __init__(self, state_machine_params: StateMachineParams):
+    def __init__(self, state_machine_params: StateMachineParams, logger: LoggerProto):
         self.params = state_machine_params
         self.states = {
             "Start": {
-                "state": StartState(self.params.start_params),
+                "state": StartState(self.params.start_params, logger=logger),
                 "transitions": {
                     "board_not_found": "DOCKING FAILED",
                     "board_found": "Check Area",
@@ -31,7 +32,7 @@ class DockingStateMachine:
                 },
             },
             "Check Area": {
-                "state": CheckArea(self.params.check_area_params),
+                "state": CheckArea(self.params.check_area_params, logger=logger),
                 "transitions": {
                     "board_lost": "DOCKING FAILED",
                     "docking_area": "Reach Docking Point",
@@ -46,7 +47,7 @@ class DockingStateMachine:
                 },
             },
             "Rotate To Dock Area": {
-                "state": RotateToDockArea(self.params.rotate_to_dock_area_params),
+                "state": RotateToDockArea(self.params.rotate_to_dock_area_params, logger=logger),
                 "remapping": {
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
@@ -54,7 +55,7 @@ class DockingStateMachine:
                 },
             },
             "Ride To Dock Area": {
-                "state": RideToDockArea(self.params.ride_to_dock_area_params),
+                "state": RideToDockArea(self.params.ride_to_dock_area_params, logger=logger),
                 "remapping": {
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
@@ -62,7 +63,7 @@ class DockingStateMachine:
                 },
             },
             "Rotate To Board": {
-                "state": RotateToBoard(self.params.rotate_to_board_params),
+                "state": RotateToBoard(self.params.rotate_to_board_params, logger=logger),
                 "remapping": {
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
@@ -70,18 +71,18 @@ class DockingStateMachine:
                 }
             },
             "Rotate To Docking Point": {
-                "state": RotateToDockingPoint(self.params.global_params, self.params.rotate_to_docking_point_params),
+                "state": RotateToDockingPoint(self.params.global_params, self.params.rotate_to_docking_point_params, logger=logger),
             },
             "Reach Docking Point": {
-                "state": ReachDockingPoint(self.params.global_params, self.params.reach_docking_point_params),
+                "state": ReachDockingPoint(self.params.global_params, self.params.reach_docking_point_params, logger=logger),
             },
             "Reach Docking Point Orientation": {
                 "state": ReachDockingOrientation(
-                    self.params.global_params, self.params.reach_docking_orientation_params
+                    self.params.global_params, self.params.reach_docking_orientation_params, logger=logger
                 ),
             },
             "Dock": {
-                "state": Dock(self.params.global_params, self.params.dock_params),
+                "state": Dock(self.params.global_params, self.params.dock_params, logger=logger),
                 "transitions": {
                     "succeeded": "ROVER DOCKED",
                     "odometry_not_working": "DOCKING FAILED",
