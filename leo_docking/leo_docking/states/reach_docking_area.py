@@ -98,10 +98,11 @@ class BaseDockAreaState(smach.State):
         direction = 1.0 if route_left > 0 else -1.0
         route_left = math.fabs(route_left)
         msg = Twist()
-
+        self.logger.error("START OF MOVEMENT LOOP")
         while True:
             with self.route_lock:
                 if self.route_done + self.params.epsilon >= route_left:
+                    self.logger.error("ROUTE DONE!")
                     break
 
                 speed = self._get_speed(route_left, self.route_done, direction)
@@ -157,7 +158,9 @@ class BaseDockAreaState(smach.State):
                 return "odometry_not_working"
 
             sleep(0.1)
-
+        self.logger.error(
+            f"FOUND ODOM MSGS."
+        )
         target_pose: PyKDL.Frame = ud.target_pose
         # calculating route left
         route_left = self.calculate_route_left(target_pose)
@@ -216,6 +219,7 @@ class RotateToDockArea(BaseDockAreaState):
         position: PyKDL.Vector = target_pose.p
         route_left = math.atan2(position.y(), position.x())
 
+        self.logger.error(f"CALCULATED ROUTE LEFT: {route_left}")
         return route_left
 
 

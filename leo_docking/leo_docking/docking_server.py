@@ -85,13 +85,12 @@ class DockingServer(rclpy.node.Node):
     def _publish_cmd_vel_cb(self, msg: Twist):
         self.cmd_vel_pub.publish(msg)
 
-    def _debug_visualizations_cb(self, docking_point, docking_orientation, board_normalized, seq):
+    def _debug_visualizations_cb(self, docking_point, docking_orientation, board_normalized):
         visualize_position(
             docking_point,
             docking_orientation,
             "base_link",
             "docking_point",
-            seq,
             self.tf_broadcaster,
         )
         visualize_position(
@@ -99,7 +98,6 @@ class DockingServer(rclpy.node.Node):
             board_normalized.M.GetQuaternion(),
             "base_link",
             "normalized_board",
-            seq,
             self.tf_broadcaster,
         )
 

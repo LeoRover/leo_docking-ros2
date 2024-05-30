@@ -88,8 +88,6 @@ class BaseDockingState(smach.State):
 
         self.board_id = None
 
-        self.seq = 0
-
     def calculate_route_left(self, board: BoardPose) -> None:
         """Function calculating route left (either angle left to target or linear distance)
         from the docking pose calculated from the current board detection.
@@ -176,8 +174,7 @@ class BaseDockingState(smach.State):
                         board, distance=self.global_params.docking_point_dist
                     )
                     board_normalized = normalize_board(board)
-                    self.debug_visualizations_cb(docking_point, docking_orientation, board_normalized, self.seq)
-                    self.seq += 1
+                    self.debug_visualizations_cb(docking_point, docking_orientation, board_normalized)
 
                 with self.route_lock:
                     self.calculate_route_left(board)
