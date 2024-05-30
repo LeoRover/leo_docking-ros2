@@ -206,19 +206,19 @@ class DockingStateMachine:
 
         with reach_docking_area:
             Sequence.add(
-                "Rotate To Dock Area",
-                self.states["Rotate To Dock Area"]["state"],
-                self.states["Rotate To Dock Area"]["remapping"],
+                label="Rotate To Dock Area",
+                state=self.states["Rotate To Dock Area"]["state"],
+                remapping=self.states["Rotate To Dock Area"]["remapping"],
             )
             Sequence.add(
-                "Ride To Dock Area",
-                self.states["Ride To Dock Area"]["state"],
-                self.states["Ride To Dock Area"]["remapping"],
+                label="Ride To Dock Area",
+                state=self.states["Ride To Dock Area"]["state"],
+                remapping=self.states["Ride To Dock Area"]["remapping"],
             )
             Sequence.add(
-                "Rotate To Board",
-                self.states["Rotate To Board"]["state"],
-                self.states["Rotate To Board"]["remapping"],
+                label="Rotate To Board",
+                state=self.states["Rotate To Board"]["state"],
+                remapping=self.states["Rotate To Board"]["remapping"],
             )
         return reach_docking_area
 
@@ -232,5 +232,5 @@ class DockingStateMachine:
         with reach_docking_pose:
             Sequence.add("Rotate To Docking Point", self.states["Rotate To Docking Point"]["state"])
             Sequence.add("Reach Docking Point", self.states["Reach Docking Point"]["state"])
-            Sequence.add("Reach Docking Orientation", self.states["Reach Docking Orientation"]["state"]),
+            Sequence.add("Reach Docking Orientation", self.states["Reach Docking Point Orientation"]["state"]),
         return reach_docking_pose

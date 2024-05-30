@@ -160,7 +160,7 @@ class StateMachineParams:
             speed_min=node.declare_parameter("ride_to_dock_area/speed_min", 0.05).value,
             speed_max=node.declare_parameter("ride_to_dock_area/speed_max", 0.4).value,
             dist_min=node.declare_parameter("ride_to_dock_area/distance_min", 0.1).value,
-            dist_max=node.declare_parameter("ride_to_dock_area/distance_min", 0.5).value,
+            dist_max=node.declare_parameter("ride_to_dock_area/distance_max", 0.5).value,
         )
         self.rotate_to_board_params = RotateToBoardParams(
             timeout=node.declare_parameter("rotate_to_board/timeout", self.global_params.timeout).value,
@@ -187,7 +187,7 @@ class StateMachineParams:
             speed_min=node.declare_parameter("reach_docking_point/speed_min", 0.1).value,
             speed_max=node.declare_parameter("reach_docking_point/speed_max", 0.3).value,
             dist_min=node.declare_parameter("reach_docking_point/distance_min", 0.05).value,
-            dist_max=node.declare_parameter("reach_docking_point/distance_min", 1.5).value,
+            dist_max=node.declare_parameter("reach_docking_point/distance_max", 1.5).value,
             bias_speed_min=node.declare_parameter("reach_docking_point/bias_speed_min", 0.05).value,
             bias_speed_max=node.declare_parameter("reach_docking_point/bias_speed_max", 0.3).value,
             bias_min=node.declare_parameter("reach_docking_point/bias_min", 0.01).value,
@@ -203,11 +203,11 @@ class StateMachineParams:
         )
         self.dock_params = DockParams(
             timeout=node.declare_parameter("dock/timeout", self.global_params.timeout).value,
-            epsilon=node.declare_parameter("dock/epsilon", self.global_params.timeout).value,
+            epsilon=node.declare_parameter("dock/epsilon", self.global_params.epsilon).value,
             speed_min=node.declare_parameter("dock/speed_min", 0.05).value,
             speed_max=node.declare_parameter("dock/speed_max", 0.2).value,
             dist_min=node.declare_parameter("dock/distance_min", 0.05).value,
-            dist_max=node.declare_parameter("dock/distance_min", 0.8).value,
+            dist_max=node.declare_parameter("dock/distance_max", 0.8).value,
             bias_speed_min=node.declare_parameter("dock/bias_speed_min", 0.05).value,
             bias_speed_max=node.declare_parameter("dock/bias_speed_max", 0.3).value,
             bias_min=node.declare_parameter("dock/bias_min", 0.01).value,

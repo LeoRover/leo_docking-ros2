@@ -41,7 +41,9 @@ class DockingServer(rclpy.node.Node):
         )
 
         # Create and start the introspection server
-        self._smach_introspection_server = IntrospectionServer("leo_docking", self._state_machine, "/LEO_DOCKING")
+        self._smach_introspection_server = IntrospectionServer(
+            "leo_docking", self._state_machine.state_machine, "/LEO_DOCKING"
+        )
 
     def _init_ros(self):
         sub_qos = QoSProfile(
