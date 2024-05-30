@@ -4,7 +4,7 @@ from threading import Lock
 from queue import Queue
 import math
 import numpy as np
-import time
+from time import sleep, time
 
 from aruco_opencv_msgs.msg import BoardPose
 from geometry_msgs.msg import Twist
@@ -25,10 +25,10 @@ from leo_docking.state_machine_params import GlobalParams, DockParams
 
 class Dock(BaseDockingState):
     """State performing final phase of the docking - reaching the base.
-    Drives the rover forward unitl one of three condition is satisfied:
+    Drives the rover forward until one of three condition is satisfied:
     - rover is close enough to the board located on the docking base
     - the voltage on the topic with battery data is higher than the average collected before docking
-    (if the average was low enough at the beggining)
+    (if the average was low enough at the beginning)
     - the effort on the wheel motors is high enough - the rover is pushing against the base
     """
 
@@ -51,6 +51,7 @@ class Dock(BaseDockingState):
         self.bias_left = 0.0
         self.bias_done = 0.0
         self.bias_direction = 0.0
+        self.end_time = 0.0
 
         self.publish_cmd_vel_cb = None
 
@@ -83,7 +84,7 @@ class Dock(BaseDockingState):
         with self.battery_lock:
             if not self.executing:
                 return
-            if self.node.get_clock().now() < self.end_time:
+            if time() < self.end_time:
                 self.acc_data += data.data
                 self.counter += 1
             elif not self.battery_reference and self.counter != 0:
@@ -121,14 +122,14 @@ class Dock(BaseDockingState):
         """Function performing rover movement; invoked in the "execute" method of the state."""
         self.executing = True
         self.logger.info("Waiting for motors effort and battery voltage to drop.")
-        time.sleep(self.global_params.motor_cd_time)
+        sleep(self.global_params.motor_cd_time)
 
         with self.battery_lock:
-            self.end_time = self.node.get_clock().now() + Time(seconds=self.global_params.battery_averaging_time)
+            self.end_time = time() + self.global_params.battery_averaging_time
 
         # waiting for the end of colleting data
         self.logger.info("Measuring battery data...")
-        time.sleep(self.global_params.battery_averaging_time)
+        sleep(self.global_params.battery_averaging_time)
         self.logger.info("Batery voltage average level calculated. Performing docking.")
 
         msg = Twist()
@@ -176,7 +177,7 @@ class Dock(BaseDockingState):
                     return "preempted"
 
                 self.publish_cmd_vel_cb(msg)
-            time.sleep(0.1)
+            sleep(0.1)
         self.executing = False
         self.publish_cmd_vel_cb(Twist())
         return None

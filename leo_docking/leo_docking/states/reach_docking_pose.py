@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Optional, List, Union
 from threading import Lock, Event
 import math
+from time import sleep, time
 
 import tf2_ros
 import smach
@@ -98,7 +99,6 @@ class BaseDockingState(smach.State):
     def movement_loop(self) -> Optional[str]:
         """Function performing rover movement; invoked in the "execute" method of the state."""
         msg = Twist()
-        rate = self.node.create_rate(10)
 
         while True:
             with self.route_lock:
@@ -117,7 +117,7 @@ class BaseDockingState(smach.State):
                     return "preempted"
 
                 self.publish_cmd_vel_cb(msg)
-            rate.sleep()
+            sleep(0.1)
 
         self.publish_cmd_vel_cb(Twist())
         return None
@@ -226,17 +226,14 @@ class BaseDockingState(smach.State):
 
         self.board_id = ud.action_goal.board_id
 
-        rate = self.node.create_rate(10)
-        time_start = self.node.get_clock().now()
-
+        start_time = time()
         while not self.board_flag.is_set() or not self.odom_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
                 ud.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
 
-            if (self.node.get_clock().now() - time_start).to_sec() > self.params.timeout:
-
+            if time() - start_time > self.params.timeout:
                 if not self.board_flag.is_set():
                     self.logger.error(f"Board (id: {self.board_id}) lost. Docking failed.")
                     ud.action_result.result = (
@@ -248,7 +245,7 @@ class BaseDockingState(smach.State):
                     ud.action_result.result = f"{self.state_log_name}: wheel odometry not working. Docking failed."
                     return "odometry_not_working"
 
-            rate.sleep()
+            sleep(0.1)
 
         outcome = self.movement_loop()
         if outcome:
@@ -347,7 +344,6 @@ class ReachDockingPoint(BaseDockingState):
 
     def movement_loop(self) -> Optional[str]:
         msg = Twist()
-        rate = self.node.create_rate(10)
 
         while True:
             with self.route_lock:
@@ -375,7 +371,7 @@ class ReachDockingPoint(BaseDockingState):
                     return "preempted"
 
                 self.publish_cmd_vel_cb(msg)
-            rate.sleep()
+            sleep(0.1)
 
         self.publish_cmd_vel_cb(Twist())
         return None

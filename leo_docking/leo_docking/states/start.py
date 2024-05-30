@@ -1,4 +1,5 @@
 from threading import Event
+from time import sleep, time
 
 import smach
 
@@ -66,22 +67,20 @@ class StartState(smach.State):
             f"Waiting for board detection. Required board_id: {self.board_id}"
         )
 
-        rate = self.node.create_rate(10)
-        time_start = self.node.get_clock().now()
+        start_time = time()
         while not self.board_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
                 user_data.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
-            secs = (self.node.get_clock().now() - time_start).nanoseconds//1e9
-            if secs > self.params.timeout:
-                self.logger.error("Didn't find a board. Docking failed.")
+            if time() - start_time > self.params.timeout:
+                self.logger.error(f"Couldn't find a board in {self.params.timeout} seconds. Docking failed.")
                 user_data.action_result.result = (
-                    f"{self.state_log_name}: didn't find a board. Docking failed."
+                    f"{self.state_log_name}: couldn't find a board. Docking failed."
                 )
                 return "board_not_found"
 
-            rate.sleep()
+            sleep(0.1)
 
         user_data.action_feedback.current_state = (
             f"{self.state_log_name}: board with id: {self.board_id} found. "

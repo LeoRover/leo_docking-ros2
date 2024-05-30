@@ -1,5 +1,6 @@
 import math
 from threading import Event
+from time import sleep, time
 
 import smach
 
@@ -95,22 +96,20 @@ class CheckArea(smach.State):
         self.board_id = ud.action_goal.board_id
         self.logger.info(f"Waiting for board (id: {self.board_id}) detection.")
 
-        rate = self.node.create_rate(10)
-        time_start = self.node.get_clock().now()
+        start_time = time()
         while not self.board_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
                 ud.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
-            secs = (self.node.get_clock().now() - time_start).nanoseconds//1e9
-            if secs > self.params.timeout:
+            if time() - start_time > self.params.timeout:
                 self.logger.error(f"Board (id: {self.board_id}) lost. Docking failed.")
                 ud.action_result.result = (
                     f"{self.state_log_name}: board lost. Docking failed."
                 )
                 return "board_lost"
 
-            rate.sleep()
+            sleep(0.1)
 
         # calculating the length of distances needed for threshold checking
         x_dist, y_dist = calculate_threshold_distances(self.board)

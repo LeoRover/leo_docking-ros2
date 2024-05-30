@@ -1,6 +1,7 @@
 import math
 from threading import Event, Lock
 from typing import Optional, List, Union
+from time import sleep, time
 
 import smach
 
@@ -95,13 +96,11 @@ class BaseDockAreaState(smach.State):
 
         Args:
             route_left: route (angle / distance) the rover has to ride
-            angle: flag specifying wheter it will be movement in x axis, or rotation around z axis.
+            angle: flag specifying whether it will be movement in x axis, or rotation around z axis.
         """
         direction = 1.0 if route_left > 0 else -1.0
         route_left = math.fabs(route_left)
         msg = Twist()
-
-        rate = self.node.create_rate(10)
 
         while True:
             with self.route_lock:
@@ -120,7 +119,7 @@ class BaseDockAreaState(smach.State):
                     return "preempted"
 
                 self.publish_cmd_vel_cb(msg)
-            rate.sleep()
+            sleep(0.1)
 
         self.publish_cmd_vel_cb(Twist())
 
@@ -148,22 +147,20 @@ class BaseDockAreaState(smach.State):
         """Main state method, executed automatically on state entered"""
         self.reset_state()
 
-        rate = self.node.create_rate(10)
-        time_start = self.node.get_clock().now()
+        start_time = time()
         while not self.odom_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
                 ud.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
-            secs = (self.node.get_clock().now() - time_start).nanoseconds//1e9
-            if secs > self.params.timeout:
-                self.logger.error("Didn't get wheel odometry message. Docking failed.")
+            if time() - start_time > self.params.timeout:
+                self.logger.error(f"Couldn't get wheel odometry message in {self.params.timeout} seconds. Docking failed.")
                 ud.action_result.result = (
                     f"{self.state_log_name}: No odom data. Docking failed."
                 )
                 return "odometry_not_working"
 
-            rate.sleep()
+            sleep(0.1)
 
         target_pose: PyKDL.Frame = ud.target_pose
         # calculating route left
