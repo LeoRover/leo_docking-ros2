@@ -1,6 +1,6 @@
 import math
 from threading import Event, Lock
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Callable
 from time import sleep, time
 
 import smach
@@ -26,12 +26,13 @@ class BaseDockAreaState(smach.State):
     def __init__(
         self,
         local_params: Union[RotateToDockAreaParams, RideToDockAreaParams, RotateToBoardParams],
+        publish_cmd_vel_cb: Callable,
+        logger: LoggerProto,
         outcomes: Optional[List[str]] = None,
         input_keys: Optional[List[str]] = None,
         output_keys: Optional[List[str]] = None,
         angle: bool = True,
         name: str = "",
-        logger: LoggerProto = None,
     ):
         if outcomes is None:
             outcomes = ["succeeded", "odometry_not_working", "preempted"]
@@ -52,7 +53,7 @@ class BaseDockAreaState(smach.State):
         self.route_done = 0.0
         self.odom_reference = None
 
-        self.publish_cmd_vel_cb = None
+        self.publish_cmd_vel_cb = publish_cmd_vel_cb
 
         self.logger = logger
         self.reset_state()
@@ -210,11 +211,12 @@ class RotateToDockArea(BaseDockAreaState):
     def __init__(
         self,
         local_params: RotateToDockAreaParams,
+        publish_cmd_vel_cb: Callable,
+        logger: LoggerProto,
         angle: bool = True,
         name: str = "Rotate Towards Area",
-        logger: LoggerProto = None,
     ):
-        super().__init__(local_params, angle=angle, name=name, logger=logger)
+        super().__init__(local_params, publish_cmd_vel_cb, logger, angle=angle, name=name)
 
     def calculate_route_left(self, target_pose: PyKDL.Frame) -> float:
         position: PyKDL.Vector = target_pose.p
@@ -231,11 +233,12 @@ class RideToDockArea(BaseDockAreaState):
     def __init__(
         self,
         local_params: RideToDockAreaParams,
+        publish_cmd_vel_cb: Callable,
+        logger: LoggerProto,
         angle: bool = False,
         name="Ride To Area",
-        logger: LoggerProto = None,
     ):
-        super().__init__(local_params, angle=angle, name=name, logger=logger)
+        super().__init__(local_params, publish_cmd_vel_cb, logger, angle=angle, name=name)
 
     def calculate_route_left(self, target_pose: PyKDL.Frame) -> float:
         position: PyKDL.Vector = target_pose.p
@@ -251,15 +254,16 @@ class RotateToBoard(BaseDockAreaState):
     def __init__(
         self,
         local_params: RotateToBoardParams,
+        publish_cmd_vel_cb: Callable,
+        logger: LoggerProto,
         output_keys: Optional[List[str]] = None,
         angle: bool = True,
         name: str = "Rotate Towards Board",
-        logger: LoggerProto = None,
     ):
         if output_keys is None:
             output_keys = []
 
-        super().__init__(local_params, output_keys=output_keys, angle=angle, name=name, logger=logger)
+        super().__init__(local_params, publish_cmd_vel_cb, logger, output_keys=output_keys, angle=angle, name=name)
 
     def calculate_route_left(self, target_pose: PyKDL.Frame) -> float:
         position: PyKDL.Vector = target_pose.p

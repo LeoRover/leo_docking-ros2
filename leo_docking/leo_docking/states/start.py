@@ -16,10 +16,10 @@ class StartState(smach.State):
     def __init__(
         self,
         start_params: StartParams,
+        logger: LoggerProto,
         outcomes: Optional[List[str]] = None,
         input_keys: Optional[List[str]] = None,
         name: str = "Start",
-        logger: LoggerProto = None,
     ):
         if outcomes is None:
             outcomes = ["board_not_found", "board_found", "preempted"]

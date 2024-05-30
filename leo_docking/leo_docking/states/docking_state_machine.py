@@ -1,3 +1,5 @@
+from typing import Callable
+
 from smach import StateMachine, Sequence
 
 from leo_docking.states.start import StartState
@@ -15,11 +17,11 @@ from leo_docking.utils import LoggerProto
 
 
 class DockingStateMachine:
-    def __init__(self, state_machine_params: StateMachineParams, logger: LoggerProto):
+    def __init__(self, state_machine_params: StateMachineParams, logger: LoggerProto, publish_cmd_vel_cb: Callable, debug_visualizations_cb: Callable):
         self.params = state_machine_params
         self.states = {
             "Start": {
-                "state": StartState(self.params.start_params, logger=logger),
+                "state": StartState(self.params.start_params, logger),
                 "transitions": {
                     "board_not_found": "DOCKING FAILED",
                     "board_found": "Check Area",
@@ -32,7 +34,7 @@ class DockingStateMachine:
                 },
             },
             "Check Area": {
-                "state": CheckArea(self.params.check_area_params, logger=logger),
+                "state": CheckArea(self.params.check_area_params, logger),
                 "transitions": {
                     "board_lost": "DOCKING FAILED",
                     "docking_area": "Reach Docking Point",
@@ -47,7 +49,7 @@ class DockingStateMachine:
                 },
             },
             "Rotate To Dock Area": {
-                "state": RotateToDockArea(self.params.rotate_to_dock_area_params, logger=logger),
+                "state": RotateToDockArea(self.params.rotate_to_dock_area_params, publish_cmd_vel_cb, logger),
                 "remapping": {
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
@@ -55,7 +57,7 @@ class DockingStateMachine:
                 },
             },
             "Ride To Dock Area": {
-                "state": RideToDockArea(self.params.ride_to_dock_area_params, logger=logger),
+                "state": RideToDockArea(self.params.ride_to_dock_area_params, publish_cmd_vel_cb, logger),
                 "remapping": {
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
@@ -63,7 +65,7 @@ class DockingStateMachine:
                 },
             },
             "Rotate To Board": {
-                "state": RotateToBoard(self.params.rotate_to_board_params, logger=logger),
+                "state": RotateToBoard(self.params.rotate_to_board_params, publish_cmd_vel_cb, logger),
                 "remapping": {
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
@@ -71,18 +73,18 @@ class DockingStateMachine:
                 }
             },
             "Rotate To Docking Point": {
-                "state": RotateToDockingPoint(self.params.global_params, self.params.rotate_to_docking_point_params, logger=logger),
+                "state": RotateToDockingPoint(self.params.global_params, self.params.rotate_to_docking_point_params, publish_cmd_vel_cb, logger, debug_visualizations_cb,),
             },
             "Reach Docking Point": {
-                "state": ReachDockingPoint(self.params.global_params, self.params.reach_docking_point_params, logger=logger),
+                "state": ReachDockingPoint(self.params.global_params, self.params.reach_docking_point_params, publish_cmd_vel_cb, logger, debug_visualizations_cb,),
             },
             "Reach Docking Point Orientation": {
                 "state": ReachDockingOrientation(
-                    self.params.global_params, self.params.reach_docking_orientation_params, logger=logger
+                    self.params.global_params, self.params.reach_docking_orientation_params, publish_cmd_vel_cb, logger, debug_visualizations_cb,
                 ),
             },
             "Dock": {
-                "state": Dock(self.params.global_params, self.params.dock_params, logger=logger),
+                "state": Dock(self.params.global_params, self.params.dock_params, publish_cmd_vel_cb, logger, debug_visualizations_cb,),
                 "transitions": {
                     "succeeded": "ROVER DOCKED",
                     "odometry_not_working": "DOCKING FAILED",

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional
+from typing import Optional, Callable
 from threading import Lock
 from queue import Queue
 import math
@@ -36,14 +36,18 @@ class Dock(BaseDockingState):
         self,
         global_params: GlobalParams,
         params: DockParams,
+        publish_cmd_vel_cb: Callable,
+        logger: LoggerProto,
+        debug_visualizations_cb,
         name: str = "Dock",
-        logger: LoggerProto = None,
     ):
         super().__init__(
             global_params,
             params,
+            publish_cmd_vel_cb,
+            logger,
+            debug_visualizations_cb,
             name=name,
-            logger=logger
         )
         self.executing = False
         self.battery_lock: Lock = Lock()
@@ -52,8 +56,6 @@ class Dock(BaseDockingState):
         self.bias_done = 0.0
         self.bias_direction = 0.0
         self.end_time = 0.0
-
-        self.publish_cmd_vel_cb = None
 
         self.charging = False
         self.battery_reference = None

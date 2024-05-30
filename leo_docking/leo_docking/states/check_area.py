@@ -25,11 +25,11 @@ class CheckArea(smach.State):
     def __init__(
         self,
         check_area_params: CheckAreaParams,
+        logger: LoggerProto,
         outcomes: Optional[List[str]] = None,
         input_keys: Optional[List[str]] = None,
         output_keys: Optional[List[str]] = None,
         name: str = "Check Area",
-        logger: LoggerProto = None,
     ):
         if output_keys is None:
             output_keys = ["target_pose"]

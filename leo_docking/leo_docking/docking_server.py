@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import rclpy
+import tf2_ros
 from aruco_opencv_msgs.msg import ArucoDetection
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
@@ -13,6 +14,7 @@ from leo_docking.states.docking_state_machine import DockingStateMachine
 from leo_docking.state_machine_params import StateMachineParams
 from std_msgs.msg import Float32
 
+from leo_docking.utils import visualize_position
 from leo_docking_msgs.action import PerformDocking
 
 
@@ -20,7 +22,9 @@ class DockingServer(rclpy.node.Node):
     def __init__(self):
         super().__init__("docking_server")
         self._state_machine_params = StateMachineParams(self)
-        self._state_machine = DockingStateMachine(self._state_machine_params, self.get_logger())
+        self._state_machine = DockingStateMachine(
+            self._state_machine_params, self.get_logger(), self._publish_cmd_vel_cb, self._debug_visualizations_cb
+        )
         self._init_ros()
 
         self._action_server_wrapper = ActionServerWrapper(
@@ -51,13 +55,7 @@ class DockingServer(rclpy.node.Node):
         pub_qos = QoSProfile(reliability=QoSReliabilityPolicy.RELIABLE, durability=QoSDurabilityPolicy.VOLATILE, depth=1)
         self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", qos_profile=pub_qos)
 
-        self._state_machine.states["Rotate To Dock Area"]["state"].publish_cmd_vel_cb = self._publish_cmd_vel_cb
-        self._state_machine.states["Ride To Dock Area"]["state"].publish_cmd_vel_cb = self._publish_cmd_vel_cb
-        self._state_machine.states["Rotate To Board"]["state"].publish_cmd_vel_cb = self._publish_cmd_vel_cb
-        self._state_machine.states["Rotate To Docking Point"]["state"].publish_cmd_vel_cb = self._publish_cmd_vel_cb
-        self._state_machine.states["Reach Docking Point"]["state"].publish_cmd_vel_cb = self._publish_cmd_vel_cb
-        self._state_machine.states["Reach Docking Point Orientation"]["state"].publish_cmd_vel_cb = self._publish_cmd_vel_cb
-        self._state_machine.states["Dock"]["state"].publish_cmd_vel_cb = self._publish_cmd_vel_cb
+        self.tf_broadcaster = tf2_ros.TransformBroadcaster(node=self)
 
     def _aruco_detection_cb(self, msg: ArucoDetection):
         self._state_machine.states["Start"]["state"].aruco_detection_cb(msg)
@@ -82,6 +80,24 @@ class DockingServer(rclpy.node.Node):
 
     def _publish_cmd_vel_cb(self, msg: Twist):
         self.cmd_vel_pub.publish(msg)
+
+    def _debug_visualizations_cb(self, docking_point, docking_orientation, board_normalized, seq):
+        visualize_position(
+            docking_point,
+            docking_orientation,
+            "base_link",
+            "docking_point",
+            seq,
+            self.tf_broadcaster,
+        )
+        visualize_position(
+            board_normalized.p,
+            board_normalized.M.GetQuaternion(),
+            "base_link",
+            "normalized_board",
+            seq,
+            self.tf_broadcaster,
+        )
 
     def start(self):
         self._smach_introspection_server.start()

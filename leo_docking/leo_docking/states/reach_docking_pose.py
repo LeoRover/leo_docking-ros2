@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Callable
 from threading import Lock, Event
 import math
 from time import sleep, time
@@ -18,7 +18,6 @@ from leo_docking.utils import (
     get_location_points_from_board,
     angle_done_from_odom,
     distance_done_from_odom,
-    visualize_position,
     translate,
     normalize_board, LoggerProto,
 )
@@ -32,11 +31,13 @@ class BaseDockingState(smach.State):
         self,
         global_params: GlobalParams,
         local_params: Union[RotateToDockingPointParams, ReachDockingPointParams, ReachDockingOrientationParams, DockParams],
+        publish_cmd_vel_cb: Callable,
+        logger: LoggerProto,
+        debug_visualizations_cb: Optional[Callable] = None,
         outcomes: Optional[List[str]] = None,
         input_keys: Optional[List[str]] = None,
         angle: bool = True,
         name: str = "",
-        logger: LoggerProto = None,
     ):
         if outcomes is None:
             outcomes = ["succeeded", "odometry_not_working", "board_lost", "preempted"]
@@ -63,11 +64,8 @@ class BaseDockingState(smach.State):
 
         self.state_log_name = name
 
-        # debug variables
-        self.seq = 0
-        self.tf_broadcaster = tf2_ros.TransformBroadcaster(node=self.node)
-
-        self.publish_cmd_vel_cb = None
+        self.publish_cmd_vel_cb = publish_cmd_vel_cb
+        self.debug_visualizations_cb = debug_visualizations_cb
 
         self.logger = logger
         self.reset_state()
@@ -171,31 +169,11 @@ class BaseDockingState(smach.State):
                     self.board_flag.set()
 
                 if self.global_params.debug:
-                    (
-                        docking_point,
-                        docking_orientation,
-                    ) = get_location_points_from_board(
+                    docking_point, docking_orientation = get_location_points_from_board(
                         board, distance=self.global_params.docking_point_dist
                     )
-                    visualize_position(
-                        docking_point,
-                        docking_orientation,
-                        "base_link",
-                        "docking_point",
-                        self.seq,
-                        self.tf_broadcaster,
-                    )
-
                     board_normalized = normalize_board(board)
-                    visualize_position(
-                        board_normalized.p,
-                        board_normalized.M.GetQuaternion(),
-                        "base_link",
-                        "normalized_board",
-                        self.seq,
-                        self.tf_broadcaster,
-                    )
-
+                    self.debug_visualizations_cb(docking_point, docking_orientation, board_normalized, self.seq)
                     self.seq += 1
 
                 with self.route_lock:
@@ -279,16 +257,20 @@ class RotateToDockingPoint(BaseDockingState):
         self,
         global_params: GlobalParams,
         local_params: RotateToDockingPointParams,
+        publish_cmd_vel_cb: Callable,
+        logger: LoggerProto,
+        debug_visualizations_cb: Optional[Callable] = None,
         angular: bool = True,
         name: str = "Rotate To Docking Point",
-        logger: LoggerProto = None,
     ):
         super().__init__(
             global_params,
             local_params,
+            publish_cmd_vel_cb,
+            logger,
+            debug_visualizations_cb,
             angle=angular,
             name=name,
-            logger=logger
         )
 
     def calculate_route_left(self, board: BoardPose):
@@ -319,16 +301,20 @@ class ReachDockingPoint(BaseDockingState):
         self,
         global_params: GlobalParams,
         local_params: ReachDockingPointParams,
+        publish_cmd_vel_cb: Callable,
+        logger: LoggerProto,
+        debug_visualizations_cb: Optional[Callable] = None,
         angular: bool = False,
         name: str = "Reach Docking Point",
-        logger: LoggerProto = None,
     ):
         super().__init__(
             global_params,
             local_params,
+            publish_cmd_vel_cb,
+            logger,
+            debug_visualizations_cb,
             angle=angular,
             name=name,
-            logger=logger
         )
         self.bias_left = 0.0
         self.bias_done = 0.0
@@ -404,16 +390,20 @@ class ReachDockingOrientation(BaseDockingState):
         self,
         global_params: GlobalParams,
         local_params: ReachDockingOrientationParams,
+        publish_cmd_vel_cb: Callable,
+        logger: LoggerProto,
+        debug_visualizations_cb: Optional[Callable] = None,
         angular: bool = True,
-        name: str = "Reach Dockin Orientation",
-        logger: LoggerProto = None,
+        name: str = "Reach Docking Orientation",
     ):
         super().__init__(
             global_params,
             local_params,
+            publish_cmd_vel_cb,
+            logger,
+            debug_visualizations_cb,
             angle=angular,
             name=name,
-            logger=logger,
         )
 
     def calculate_route_left(self, board: BoardPose):
