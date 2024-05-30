@@ -19,7 +19,7 @@ from leo_docking_msgs.action import PerformDocking
 class DockingServer(rclpy.node.Node):
     def __init__(self):
         super().__init__("docking_server")
-        self._state_machine_params = StateMachineParams()
+        self._state_machine_params = StateMachineParams(self)
         self._state_machine = DockingStateMachine(self._state_machine_params)
         self._init_ros()
 

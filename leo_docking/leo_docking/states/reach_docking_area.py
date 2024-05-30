@@ -1,8 +1,7 @@
 import math
 from threading import Event, Lock
-from typing import Optional, List
+from typing import Optional, List, Union
 
-import rclpy
 import smach
 
 from geometry_msgs.msg import Twist
@@ -16,6 +15,8 @@ from leo_docking.utils import (
     distance_done_from_odom,
 )
 
+from leo_docking.state_machine_params import GlobalParams, RotateToDockAreaParams, RideToDockAreaParams, RotateToBoardParams
+
 
 class BaseDockAreaState(smach.State):
     """Base class for the sequence states of the sub-state machine responsible
@@ -23,16 +24,10 @@ class BaseDockAreaState(smach.State):
 
     def __init__(
         self,
-        node: rclpy.node.Node,
+        local_params: Union[RotateToDockAreaParams, RideToDockAreaParams, RotateToBoardParams],
         outcomes: Optional[List[str]] = None,
         input_keys: Optional[List[str]] = None,
         output_keys: Optional[List[str]] = None,
-        timeout: int = 3,
-        speed_min: float = 0.1,
-        speed_max: float = 0.4,
-        route_min: float = 0.0,
-        route_max: float = 1.05,
-        epsilon: float = 0.1,
         angle: bool = True,
         name: str = "",
     ):
@@ -43,13 +38,7 @@ class BaseDockAreaState(smach.State):
         if output_keys is None:
             output_keys = ["target_pose"]
         super().__init__(outcomes, input_keys, output_keys)
-        self.node = node
-        self.timeout = timeout
-        self.speed_min = speed_min
-        self.speed_max = speed_max
-        self.route_min = route_min
-        self.route_max = route_max
-        self.epsilon = epsilon
+        self.params = local_params
         self.angle = angle
 
         self.output_len = len(output_keys)
@@ -114,16 +103,10 @@ class BaseDockAreaState(smach.State):
 
         while True:
             with self.route_lock:
-                if self.route_done + self.epsilon >= route_left:
+                if self.route_done + self.params.epsilon >= route_left:
                     break
 
-                speed = direction * translate(
-                    route_left - self.route_done,
-                    self.route_min,
-                    self.route_max,
-                    self.speed_min,
-                    self.speed_max,
-                )
+                speed = self._get_speed(route_left, self.route_done, direction)
 
                 if angle:
                     msg.angular.z = speed
@@ -141,6 +124,24 @@ class BaseDockAreaState(smach.State):
 
         return None
 
+    def _get_speed(self, route_left: float, route_done: float, direction: float) -> float:
+        if self.angle:
+            return direction * translate(
+                route_left - route_done,
+                self.params.angle_min,
+                self.params.angle_max,
+                self.params.speed_min,
+                self.params.speed_max,
+            )
+        return direction * translate(
+            route_left - route_done,
+            self.params.dist_min,
+            self.params.dist_max,
+            self.params.speed_min,
+            self.params.speed_max,
+        )
+
+
     def execute(self, ud):
         """Main state method, executed automatically on state entered"""
         self.reset_state()
@@ -153,7 +154,7 @@ class BaseDockAreaState(smach.State):
                 ud.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
             secs = (self.node.get_clock().now() - time_start).nanoseconds//1e9
-            if secs > self.timeout:
+            if secs > self.params.timeout:
                 self.node.get_logger().error("Didn't get wheel odometry message. Docking failed.")
                 ud.action_result.result = (
                     f"{self.state_log_name}: No odom data. Docking failed."
@@ -209,34 +210,11 @@ class RotateToDockArea(BaseDockAreaState):
 
     def __init__(
         self,
-        node: rclpy.node.Node,
-        timeout: int = 3,
-        speed_min: float = 0.1,
-        speed_max: float = 0.4,
-        angle_min: float = 0.05,
-        angle_max: float = 1.05,
-        epsilon: float = 0.1,
+        local_params: RotateToDockAreaParams,
         angle: bool = True,
         name: str = "Rotate Towards Area",
     ):
-        timeout = node.declare_parameter("rotate_to_dock_area/timeout", timeout).value
-        epsilon = node.declare_parameter("rotate_to_dock_area/epsilon", epsilon).value
-        speed_min = node.declare_parameter("rotate_to_dock_area/speed_min", speed_min).value
-        speed_max = node.declare_parameter("rotate_to_dock_area/speed_max", speed_max).value
-        angle_min = node.declare_parameter("rotate_to_dock_area/angle_min", angle_min).value
-        angle_max = node.declare_parameter("rotate_to_dock_area/angle_max", angle_max).value
-
-        super().__init__(
-            node,
-            timeout=timeout,
-            speed_min=speed_min,
-            speed_max=speed_max,
-            route_min=angle_min,
-            route_max=angle_max,
-            epsilon=epsilon,
-            angle=angle,
-            name=name,
-        )
+        super().__init__(local_params, angle=angle, name=name)
 
     def calculate_route_left(self, target_pose: PyKDL.Frame) -> float:
         position: PyKDL.Vector = target_pose.p
@@ -252,34 +230,11 @@ class RideToDockArea(BaseDockAreaState):
 
     def __init__(
         self,
-        node: rclpy.node.Node,
-        timeout: int = 3,
-        speed_min: float = 0.05,
-        speed_max: float = 0.4,
-        distance_min: float = 0.1,
-        distance_max: float = 0.5,
-        epsilon: float = 0.1,
-        angle=False,
+        local_params: RideToDockAreaParams,
+        angle: bool = False,
         name="Ride To Area",
     ):
-        timeout = node.declare_parameter("ride_to_dock_area/timeout", timeout).value
-        epsilon = node.declare_parameter("ride_to_dock_area/epsilon", epsilon).value
-        speed_min = node.declare_parameter("ride_to_dock_area/speed_min", speed_min).value
-        speed_max = node.declare_parameter("ride_to_dock_area/speed_max", speed_max).value
-        distance_min = node.declare_parameter("ride_to_dock_area/distance_min", distance_min).value
-        distance_max = node.declare_parameter("ride_to_dock_area/distance_max", distance_max).value
-
-        super().__init__(
-            node,
-            timeout=timeout,
-            speed_min=speed_min,
-            speed_max=speed_max,
-            route_min=distance_min,
-            route_max=distance_max,
-            epsilon=epsilon,
-            angle=angle,
-            name=name,
-        )
+        super().__init__(local_params, angle=angle, name=name)
 
     def calculate_route_left(self, target_pose: PyKDL.Frame) -> float:
         position: PyKDL.Vector = target_pose.p
@@ -294,38 +249,15 @@ class RotateToBoard(BaseDockAreaState):
 
     def __init__(
         self,
-        node: rclpy.node.Node,
-        output_keys: List[str] = None,
-        timeout: int = 3,
-        speed_min: float = 0.1,
-        speed_max: float = 0.4,
-        angle_min: float = 0.05,
-        angle_max: float = 1.05,
-        epsilon: float = 0.1,
+        local_params: RotateToBoardParams,
+        output_keys: Optional[List[str]] = None,
         angle: bool = True,
         name: str = "Rotate Towards Board",
     ):
         if output_keys is None:
             output_keys = []
-        timeout = node.declare_parameter("rotate_to_board/timeout", timeout).value
-        epsilon = node.declare_parameter("rotate_to_board/epsilon", epsilon).value
-        speed_min = node.declare_parameter("rotate_to_board/speed_min", speed_min).value
-        speed_max = node.declare_parameter("rotate_to_board/speed_max", speed_max).value
-        angle_min = node.declare_parameter("rotate_to_board/angle_min", angle_min).value
-        angle_max = node.declare_parameter("rotate_to_board/angle_max", angle_max).value
 
-        super().__init__(
-            node,
-            output_keys=output_keys,
-            timeout=timeout,
-            speed_min=speed_min,
-            speed_max=speed_max,
-            route_min=angle_min,
-            route_max=angle_max,
-            epsilon=epsilon,
-            angle=angle,
-            name=name,
-        )
+        super().__init__(local_params, output_keys=output_keys, angle=angle, name=name)
 
     def calculate_route_left(self, target_pose: PyKDL.Frame) -> float:
         position: PyKDL.Vector = target_pose.p

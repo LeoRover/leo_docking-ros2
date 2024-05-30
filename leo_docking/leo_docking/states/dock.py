@@ -5,8 +5,6 @@ from queue import Queue
 import math
 import numpy as np
 import time
-import rclpy
-from rclpy.time import Time
 
 from aruco_opencv_msgs.msg import BoardPose
 from geometry_msgs.msg import Twist
@@ -22,6 +20,7 @@ from leo_docking.utils import (
     normalize_board,
 )
 from leo_docking.states.reach_docking_pose import BaseDockingState
+from leo_docking.state_machine_params import GlobalParams, DockParams
 
 
 class Dock(BaseDockingState):
@@ -35,69 +34,32 @@ class Dock(BaseDockingState):
 
     def __init__(
         self,
-        node: rclpy.node.Node,
-        timeout: int = 3,
-        speed_min: float = 0.05,
-        speed_max: float = 0.2,
-        route_min: float = 0.05,
-        route_max: float = 0.8,
-        bias_min: float = 0.01,
-        bias_max: float = 0.10,
-        bias_speed_min: float = 0.05,
-        bias_speed_max: float = 0.3,
-        epsilon: float = 0.25,
-        debug: bool = False,
-        battery_diff: float = 0.2,
-        max_bat_average: float = 11.0,
-        battery_averaging_time: float = 1.0,
-        effort_summary_threshold: float = 2.0,
-        effort_buffer_size: float = 10,
-        motor_cd_time: float = 2.0,
+        global_params: GlobalParams,
+        params: DockParams,
         name: str = "Dock",
     ):
-        self.node = node
-        self.timeout = self.node.declare_parameter("dock/timeout", timeout).value
-        epsilon = self.node.declare_parameter("dock/epsilon", epsilon).value
-        debug = self.node.get_parameter("debug").value
-        speed_min = self.node.declare_parameter("dock/speed_min", speed_min).value
-        speed_max = self.node.declare_parameter("dock/speed_max", speed_max).value
-        route_min = self.node.declare_parameter("dock/distance_min", route_min).value
-        route_max = self.node.declare_parameter("dock/distance_max", route_max).value
-
-        self.buff_size = self.node.declare_parameter("effort_buffer_size", effort_buffer_size).value
-
         super().__init__(
-            node,
-            timeout=timeout,
-            speed_min=speed_min,
-            speed_max=speed_max,
-            route_min=route_min,
-            route_max=route_max,
-            epsilon=epsilon,
-            debug=debug,
+            global_params,
+            params,
             name=name,
         )
         self.executing = False
-        self.end_time = self.node.get_clock().now()
         self.battery_lock: Lock = Lock()
-        self.battery_diff = self.node.declare_parameter("~battery_diff", battery_diff).value
-        self.battery_threshold = self.node.declare_parameter("max_battery_average", max_bat_average).value
-        self.collection_time = self.node.declare_parameter("battery_averaging_time", battery_averaging_time).value
-
-        self.motor_cd_time = self.node.declare_parameter("motor_cd_time", motor_cd_time).value
         self.effort_lock: Lock = Lock()
-        self.effort_threshold = self.node.declare_parameter("~effort_threshold", effort_summary_threshold).value
-        self.bias_min = self.node.declare_parameter("~dock/bias_min", bias_min).value
-        self.bias_max = self.node.declare_parameter("~dock/bias_max", bias_max).value
         self.bias_left = 0.0
         self.bias_done = 0.0
-        self.bias_speed_min = self.node.declare_parameter("~dock/bias_speed_min", bias_speed_min).value
-        self.bias_speed_max = self.node.declare_parameter("~dock/bias_speed_max", bias_speed_max).value
         self.bias_direction = 0.0
 
         self.publish_cmd_vel_cb = None
 
-        self.reset_state()
+        self.charging = False
+        self.battery_reference = None
+        self.acc_data = 0.0
+        self.counter = 0
+
+        self.effort_stop = False
+        self.effort_buf = Queue(maxsize=self.global_params.effort_buffer_size)
+        super().reset_state()
 
     def reset_state(self):
         self.bias_direction = 0.0
@@ -108,7 +70,7 @@ class Dock(BaseDockingState):
         self.acc_data = 0.0
         self.counter = 0
         self.effort_stop = False
-        self.effort_buf = Queue(maxsize=self.buff_size)
+        self.effort_buf = Queue(maxsize=self.global_params.effort_buffer_size)
 
         return super().reset_state()
 
@@ -126,10 +88,10 @@ class Dock(BaseDockingState):
                 self.battery_reference = self.acc_data / float(self.counter)
             else:
                 # battery average level too high to notice difference
-                if self.battery_reference > self.battery_threshold:
+                if self.battery_reference > self.global_params.max_battery_average:
                     return
 
-                if data.data > self.battery_reference + self.battery_diff:
+                if data.data > self.battery_reference + self.global_params.battery_diff:
                     self.charging = True
 
     def effort_cb(self, data: JointState) -> None:
@@ -146,7 +108,7 @@ class Dock(BaseDockingState):
                 buffer_to_np = np.array(list(self.effort_buf.queue))
                 avr = np.mean(buffer_to_np)
 
-                if avr >= self.effort_threshold:
+                if avr >= self.global_params.effort_threshold:
                     self.effort_stop = True
 
                 self.effort_buf.get_nowait()
@@ -157,14 +119,14 @@ class Dock(BaseDockingState):
         """Function performing rover movement; invoked in the "execute" method of the state."""
         self.executing = True
         self.node.get_logger().info("Waiting for motors effort and battery voltage to drop.")
-        time.sleep(self.motor_cd_time)
+        time.sleep(self.global_params.motor_cd_time)
 
         with self.battery_lock:
-            self.end_time = self.node.get_clock().now() + Time(seconds=self.collection_time)
+            self.end_time = self.node.get_clock().now() + Time(seconds=self.global_params.battery_averaging_time)
 
         # waiting for the end of colleting data
         self.node.get_logger().info("Measuring battery data...")
-        time.sleep(self.collection_time)
+        time.sleep(self.global_params.battery_averaging_time)
         self.node.get_logger().info("Batery voltage average level calculated. Performing docking.")
 
         msg = Twist()
@@ -185,26 +147,26 @@ class Dock(BaseDockingState):
                     break
 
             with self.route_lock:
-                if self.route_done + self.epsilon >= self.route_left:
+                if self.route_done + self.params.epsilon >= self.route_left:
                     self.node.get_logger().info(
                         f"Docking stopped. Condition: distance to board reached."
                     )
                     break
 
                 msg.linear.x = self.movement_direction * translate(
-                    self.route_left - (self.route_done + self.epsilon),
-                    self.route_min,
-                    self.route_max,
-                    self.speed_min,
-                    self.speed_max,
+                    self.route_left - (self.route_done + self.params.epsilon),
+                    self.params.dist_min,
+                    self.params.dist_max,
+                    self.params.speed_min,
+                    self.params.speed_max,
                 )
 
                 msg.angular.z = self.bias_direction * translate(
                     self.bias_left - self.bias_done,
-                    self.bias_min,
-                    self.bias_max,
-                    self.bias_speed_min,
-                    self.bias_speed_max,
+                    self.params.bias_min,
+                    self.params.bias_max,
+                    self.params.bias_speed_min,
+                    self.params.bias_speed_max,
                 )
 
                 if self.preempt_requested():

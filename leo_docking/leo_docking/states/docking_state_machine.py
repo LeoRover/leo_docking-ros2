@@ -18,7 +18,7 @@ class DockingStateMachine:
         self.params = state_machine_params
         self.states = {
             "Start": {
-                "state": StartState(self.params.global_params, self.params.start_params),
+                "state": StartState(self.params.start_params),
                 "transitions": {
                     "board_not_found": "DOCKING FAILED",
                     "board_found": "Check Area",
@@ -31,7 +31,7 @@ class DockingStateMachine:
                 },
             },
             "Check Area": {
-                "state": CheckArea(self.params.global_params, self.params.check_area_params),
+                "state": CheckArea(self.params.check_area_params),
                 "transitions": {
                     "board_lost": "DOCKING FAILED",
                     "docking_area": "Reach Docking Point",
@@ -46,7 +46,7 @@ class DockingStateMachine:
                 },
             },
             "Rotate To Dock Area": {
-                "state": RotateToDockArea(self.params.global_params, self.params.rotate_to_dock_area_params),
+                "state": RotateToDockArea(self.params.rotate_to_dock_area_params),
                 "remapping": {
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
@@ -54,7 +54,7 @@ class DockingStateMachine:
                 },
             },
             "Ride To Dock Area": {
-                "state": RideToDockArea(self.params.global_params, self.params.ride_to_dock_area_params),
+                "state": RideToDockArea(self.params.ride_to_dock_area_params),
                 "remapping": {
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
@@ -62,7 +62,7 @@ class DockingStateMachine:
                 },
             },
             "Rotate To Board": {
-                "state": RotateToBoard(self.params.global_params, self.params.rotate_to_board_params),
+                "state": RotateToBoard(self.params.rotate_to_board_params),
                 "remapping": {
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",

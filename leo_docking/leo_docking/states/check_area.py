@@ -1,7 +1,6 @@
 import math
 from threading import Event
 
-import rclpy
 import smach
 
 from aruco_opencv_msgs.msg import ArucoDetection
@@ -11,11 +10,10 @@ import PyKDL
 from leo_docking.utils import (
     calculate_threshold_distances,
     get_location_points_from_board,
-    visualize_position,
 )
 from typing import List, Optional
 
-from leo_docking.leo_docking.state_machine_params import GlobalParams, CheckAreaParams
+from leo_docking.state_machine_params import CheckAreaParams
 
 
 class CheckArea(smach.State):
@@ -25,7 +23,6 @@ class CheckArea(smach.State):
 
     def __init__(
         self,
-        global_params: GlobalParams,
         check_area_params: CheckAreaParams,
         outcomes: Optional[List[str]] = None,
         input_keys: Optional[List[str]] = None,
@@ -41,7 +38,6 @@ class CheckArea(smach.State):
         super().__init__(
             outcomes=outcomes, input_keys=input_keys, output_keys=output_keys
         )
-        self.global_params = global_params
         self.params = check_area_params
         self.board_id = None
         self.board = None

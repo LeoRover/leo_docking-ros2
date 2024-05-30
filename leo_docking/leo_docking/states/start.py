@@ -5,14 +5,14 @@ import smach
 from aruco_opencv_msgs.msg import ArucoDetection
 from typing import List, Optional
 
-from leo_docking.leo_docking.state_machine_params import GlobalParams, StartParams
+from leo_docking.state_machine_params import StartParams
+
 
 class StartState(smach.State):
     """State checking if the board is seen by the rover"""
 
     def __init__(
         self,
-        global_params: GlobalParams,
         start_params: StartParams,
         outcomes: Optional[List[str]] = None,
         input_keys: Optional[List[str]] = None,
@@ -23,7 +23,6 @@ class StartState(smach.State):
         if input_keys is None:
             input_keys = ["action_goal", "action_feedback", "action_result"]
         super().__init__(outcomes, input_keys)
-        self.global_params = global_params
         self.params = start_params
 
         self.board_flag: Event = Event()
