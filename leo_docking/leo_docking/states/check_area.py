@@ -10,7 +10,8 @@ import PyKDL
 
 from leo_docking.utils import (
     calculate_threshold_distances,
-    get_location_points_from_board, LoggerProto,
+    get_location_points_from_board,
+    LoggerProto,
 )
 from typing import List, Optional
 
@@ -31,15 +32,10 @@ class CheckArea(smach.State):
         output_keys: Optional[List[str]] = None,
         name: str = "Check Area",
     ):
-        if output_keys is None:
-            output_keys = ["target_pose"]
-        if input_keys is None:
-            input_keys = ["action_goal", "action_feedback", "action_result"]
-        if outcomes is None:
-            outcomes = ["docking_area", "outside_docking_area", "board_lost", "preempted"]
-        super().__init__(
-            outcomes=outcomes, input_keys=input_keys, output_keys=output_keys
-        )
+        output_keys = ["target_pose"] if output_keys is None else output_keys
+        input_keys = ["action_goal", "action_feedback", "action_result"] if input_keys is None else input_keys
+        outcomes = ["docking_area", "outside_docking_area", "board_lost", "preempted"] if outcomes is None else outcomes
+        super().__init__(outcomes=outcomes, input_keys=input_keys, output_keys=output_keys)
         self.params = check_area_params
         self.board_id = None
         self.board = None
@@ -104,9 +100,7 @@ class CheckArea(smach.State):
                 return "preempted"
             if time() - start_time > self.params.timeout:
                 self.logger.error(f"Board (id: {self.board_id}) lost. Docking failed.")
-                ud.action_result.result = (
-                    f"{self.state_log_name}: board lost. Docking failed."
-                )
+                ud.action_result.result = f"{self.state_log_name}: board lost. Docking failed."
                 return "board_lost"
 
             sleep(0.1)
@@ -122,9 +116,7 @@ class CheckArea(smach.State):
             return "docking_area"
 
         # getting target pose
-        point, orientation = get_location_points_from_board(
-            self.board, self.params.docking_distance
-        )
+        point, orientation = get_location_points_from_board(self.board, self.params.docking_distance)
 
         target_pose = PyKDL.Frame(PyKDL.Rotation.Quaternion(*orientation), point)
 

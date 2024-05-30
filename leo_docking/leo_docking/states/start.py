@@ -21,10 +21,8 @@ class StartState(smach.State):
         input_keys: Optional[List[str]] = None,
         name: str = "Start",
     ):
-        if outcomes is None:
-            outcomes = ["board_not_found", "board_found", "preempted"]
-        if input_keys is None:
-            input_keys = ["action_goal", "action_feedback", "action_result"]
+        outcomes = ["board_not_found", "board_found", "preempted"] if outcomes is None else outcomes
+        input_keys = ["action_goal", "action_feedback", "action_result"] if input_keys is None else input_keys
         super().__init__(outcomes, input_keys)
         self.params = start_params
 
@@ -63,9 +61,7 @@ class StartState(smach.State):
         self.reset_state()
 
         self.board_id = user_data.action_goal.board_id
-        self.logger.info(
-            f"Waiting for board detection. Required board_id: {self.board_id}"
-        )
+        self.logger.info(f"Waiting for board detection. Required board_id: {self.board_id}")
 
         start_time = time()
         while not self.board_flag.is_set():
@@ -75,15 +71,12 @@ class StartState(smach.State):
                 return "preempted"
             if time() - start_time > self.params.timeout:
                 self.logger.error(f"Couldn't find a board in {self.params.timeout} seconds. Docking failed.")
-                user_data.action_result.result = (
-                    f"{self.state_log_name}: couldn't find a board. Docking failed."
-                )
+                user_data.action_result.result = f"{self.state_log_name}: couldn't find a board. Docking failed."
                 return "board_not_found"
 
             sleep(0.1)
 
         user_data.action_feedback.current_state = (
-            f"{self.state_log_name}: board with id: {self.board_id} found. "
-            f"Proceeding to 'Check Area' state."
+            f"{self.state_log_name}: board with id: {self.board_id} found. " f"Proceeding to 'Check Area' state."
         )
         return "board_found"

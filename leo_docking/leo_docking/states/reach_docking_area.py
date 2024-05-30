@@ -13,7 +13,8 @@ import PyKDL
 from leo_docking.utils import (
     translate,
     angle_done_from_odom,
-    distance_done_from_odom, LoggerProto,
+    distance_done_from_odom,
+    LoggerProto,
 )
 
 from leo_docking.state_machine_params import RotateToDockAreaParams, RideToDockAreaParams, RotateToBoardParams
@@ -34,12 +35,9 @@ class BaseDockAreaState(smach.State):
         angle: bool = True,
         name: str = "",
     ):
-        if outcomes is None:
-            outcomes = ["succeeded", "odometry_not_working", "preempted"]
-        if input_keys is None:
-            input_keys = ["target_pose", "action_feedback", "action_result"]
-        if output_keys is None:
-            output_keys = ["target_pose"]
+        outcomes = ["succeeded", "odometry_not_working", "preempted"] if outcomes is None else outcomes
+        input_keys = ["target_pose", "action_feedback", "action_result"] if input_keys is None else input_keys
+        output_keys = ["target_pose"] if output_keys is None else output_keys
         super().__init__(outcomes, input_keys, output_keys)
         self.params = local_params
         self.angle = angle
@@ -63,9 +61,7 @@ class BaseDockAreaState(smach.State):
         self.odom_flag.clear()
         self.route_done = 0.0
 
-    def calculate_route_done(
-        self, odom_reference: Odometry, current_odom: Odometry, angle: bool = True
-    ) -> None:
+    def calculate_route_done(self, odom_reference: Odometry, current_odom: Odometry, angle: bool = True) -> None:
         """Function calculating route done (either angle, or distance)
         from the begining of the state (first received odometry message), to the current position.
         Saves the calculated route in a class variable "route_done".
@@ -143,7 +139,6 @@ class BaseDockAreaState(smach.State):
             self.params.speed_max,
         )
 
-
     def execute(self, ud):
         """Main state method, executed automatically on state entered"""
         self.reset_state()
@@ -155,10 +150,10 @@ class BaseDockAreaState(smach.State):
                 ud.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
             if time() - start_time > self.params.timeout:
-                self.logger.error(f"Couldn't get wheel odometry message in {self.params.timeout} seconds. Docking failed.")
-                ud.action_result.result = (
-                    f"{self.state_log_name}: No odom data. Docking failed."
+                self.logger.error(
+                    f"Couldn't get wheel odometry message in {self.params.timeout} seconds. Docking failed."
                 )
+                ud.action_result.result = f"{self.state_log_name}: No odom data. Docking failed."
                 return "odometry_not_working"
 
             sleep(0.1)
@@ -177,8 +172,7 @@ class BaseDockAreaState(smach.State):
             ud.target_pose = target_pose
 
         ud.action_feedback.current_state = (
-            f"'Reach Docking Area`: sequence completed. "
-            f"Proceeding to 'Check Area' state."
+            f"'Reach Docking Area`: sequence completed. " f"Proceeding to 'Check Area' state."
         )
         return "succeeded"
 
@@ -260,8 +254,7 @@ class RotateToBoard(BaseDockAreaState):
         angle: bool = True,
         name: str = "Rotate Towards Board",
     ):
-        if output_keys is None:
-            output_keys = []
+        output_keys = [] if output_keys is None else output_keys
 
         super().__init__(local_params, publish_cmd_vel_cb, logger, output_keys=output_keys, angle=angle, name=name)
 

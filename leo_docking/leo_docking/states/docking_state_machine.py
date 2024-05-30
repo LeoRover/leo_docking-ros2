@@ -17,7 +17,13 @@ from leo_docking.utils import LoggerProto
 
 
 class DockingStateMachine:
-    def __init__(self, state_machine_params: StateMachineParams, logger: LoggerProto, publish_cmd_vel_cb: Callable, debug_visualizations_cb: Callable):
+    def __init__(
+        self,
+        state_machine_params: StateMachineParams,
+        logger: LoggerProto,
+        publish_cmd_vel_cb: Callable,
+        debug_visualizations_cb: Callable,
+    ):
         self.params = state_machine_params
         self.states = {
             "Start": {
@@ -70,21 +76,43 @@ class DockingStateMachine:
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
                     "action_result": "action_result",
-                }
+                },
             },
             "Rotate To Docking Point": {
-                "state": RotateToDockingPoint(self.params.global_params, self.params.rotate_to_docking_point_params, publish_cmd_vel_cb, logger, debug_visualizations_cb,),
+                "state": RotateToDockingPoint(
+                    self.params.global_params,
+                    self.params.rotate_to_docking_point_params,
+                    publish_cmd_vel_cb,
+                    logger,
+                    debug_visualizations_cb,
+                ),
             },
             "Reach Docking Point": {
-                "state": ReachDockingPoint(self.params.global_params, self.params.reach_docking_point_params, publish_cmd_vel_cb, logger, debug_visualizations_cb,),
+                "state": ReachDockingPoint(
+                    self.params.global_params,
+                    self.params.reach_docking_point_params,
+                    publish_cmd_vel_cb,
+                    logger,
+                    debug_visualizations_cb,
+                ),
             },
             "Reach Docking Point Orientation": {
                 "state": ReachDockingOrientation(
-                    self.params.global_params, self.params.reach_docking_orientation_params, publish_cmd_vel_cb, logger, debug_visualizations_cb,
+                    self.params.global_params,
+                    self.params.reach_docking_orientation_params,
+                    publish_cmd_vel_cb,
+                    logger,
+                    debug_visualizations_cb,
                 ),
             },
             "Dock": {
-                "state": Dock(self.params.global_params, self.params.dock_params, publish_cmd_vel_cb, logger, debug_visualizations_cb,),
+                "state": Dock(
+                    self.params.global_params,
+                    self.params.dock_params,
+                    publish_cmd_vel_cb,
+                    logger,
+                    debug_visualizations_cb,
+                ),
                 "transitions": {
                     "succeeded": "ROVER DOCKED",
                     "odometry_not_working": "DOCKING FAILED",
@@ -95,8 +123,8 @@ class DockingStateMachine:
                     "action_goal": "action_goal",
                     "action_feedback": "action_feedback",
                     "action_result": "action_result",
-                }
-            }
+                },
+            },
         }
         self.sequences = {
             "Reach Docking Area": {
@@ -125,7 +153,7 @@ class DockingStateMachine:
                     "action_feedback": "action_feedback",
                     "action_result": "action_result",
                 },
-            }
+            },
         }
 
         self.state_machine = StateMachine(
