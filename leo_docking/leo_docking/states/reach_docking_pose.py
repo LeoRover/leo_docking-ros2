@@ -52,6 +52,7 @@ class BaseDockingState(smach.State):
         super().__init__(outcomes, input_keys)
         self.global_params = global_params
         self.params = local_params
+        self.executing = False
 
         self.board_flag: Event = Event()
         self.odom_flag: Event = Event()
@@ -81,6 +82,7 @@ class BaseDockingState(smach.State):
         self.odom_flag.clear()
         self.odom_reference = None
         self.current_odom = None
+        self.executing = False
 
         self.route_left = 0.0
         self.route_done = -1.0
@@ -161,10 +163,9 @@ class BaseDockingState(smach.State):
         Calculates the route left from the detected board, set's odometry reference, and
         (if specified), sends debug tf's so you can visualize calculated target position in rviz.
         """
-        if len(data.boards) == 0:
+        if len(data.boards) == 0 or not self.executing:
             return
 
-        board: BoardPose
         for board in data.boards:
             if board.board_name == self.board_id:
                 if not self.board_flag.is_set():
@@ -190,6 +191,9 @@ class BaseDockingState(smach.State):
         Calculates the route done from the referance message saved in board callback,
         and the current odometry pose.
         """
+        if not self.executing:
+            return
+
         if not self.odom_flag.is_set():
             self.odom_flag.set()
 
@@ -203,6 +207,7 @@ class BaseDockingState(smach.State):
         """Main state method, executed automatically on state entered"""
         self.reset_state()
 
+        self.executing = True
         self.board_id = ud.action_goal.board_id
 
         self.logger.error("START OF EXECUTE")
@@ -211,16 +216,19 @@ class BaseDockingState(smach.State):
             if self.preempt_requested():
                 self.service_preempt()
                 ud.action_result.result = f"{self.state_log_name}: state preempted."
+                self.executing = False
                 return "preempted"
 
             if time() - start_time > self.params.timeout:
                 if not self.board_flag.is_set():
                     self.logger.error(f"Board (id: {self.board_id}) lost. Docking failed.")
                     ud.action_result.result = f"{self.state_log_name}: Board lost. Docking failed."
+                    self.executing = False
                     return "board_lost"
                 else:
                     self.logger.error("Didn't get wheel odometry message. Docking failed.")
                     ud.action_result.result = f"{self.state_log_name}: wheel odometry not working. Docking failed."
+                    self.executing = False
                     return "odometry_not_working"
 
             sleep(0.1)
@@ -228,11 +236,14 @@ class BaseDockingState(smach.State):
         outcome = self.movement_loop()
         if outcome:
             ud.action_result.result = f"{self.state_log_name}: state preempted."
+            self.executing = False
             return "preempted"
 
         ud.action_feedback.current_state = f"'Reach Docking Point': sequence completed. " f"Proceeding to 'Dock' state."
         if self.state_log_name == "Dock":
             ud.action_result.result = "docking succeeded. Rover docked."
+
+        self.executing = False
         return "succeeded"
 
     def service_preempt(self):
@@ -241,6 +252,7 @@ class BaseDockingState(smach.State):
         """
         self.logger.error(f"Preemption request handling for {self.state_log_name} state")
         self.publish_cmd_vel_cb(Twist())
+        self.executing = False
         return super().service_preempt()
 
 
