@@ -102,6 +102,7 @@ class BaseDockingState(smach.State):
         """Function performing rover movement; invoked in the "execute" method of the state."""
         msg = Twist()
 
+        self.logger.error("START OF MOVEMENT LOOP")
         while True:
             with self.route_lock:
                 if self.route_done + self.params.epsilon >= self.route_left:
@@ -204,6 +205,7 @@ class BaseDockingState(smach.State):
 
         self.board_id = ud.action_goal.board_id
 
+        self.logger.error("START OF EXECUTE")
         start_time = time()
         while not self.board_flag.is_set() or not self.odom_flag.is_set():
             if self.preempt_requested():
