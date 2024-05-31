@@ -6,7 +6,7 @@
 #  ------------------------------------------------------------------
 
 from __future__ import annotations
-from typing import Tuple
+from typing import Tuple, Protocol
 
 import math
 
@@ -18,6 +18,25 @@ from aruco_opencv_msgs.msg import BoardPose
 from nav_msgs.msg import Odometry
 
 import PyKDL
+
+
+class LoggerProto(Protocol):
+    """Protocol class describing a typical logger object.
+
+    Satisfied by rclpy.impl.rcutils_logger.RcutilsLogger, AKA standard rclpy logger.
+    """
+
+    def debug(self, msg: str) -> None:
+        """Log debug message."""
+
+    def info(self, msg: str) -> None:
+        """Log info message."""
+
+    def warning(self, msg: str) -> None:
+        """Log warning message."""
+
+    def error(self, msg: str) -> None:
+        """Log error message."""
 
 
 def frame_to_pose(frame: PyKDL.Frame) -> Pose:
@@ -63,9 +82,7 @@ def pose_to_frame(pose: Pose) -> PyKDL.Frame:
 
     # creating frame
     out_frame: PyKDL.Frame = PyKDL.Frame(
-        PyKDL.Rotation.Quaternion(
-            orientation.x, orientation.y, orientation.z, orientation.w
-        ),
+        PyKDL.Rotation.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w),
         PyKDL.Vector(position.x, position.y, 0.0),
     )
 
@@ -133,9 +150,7 @@ def get_location_points_from_board(
     return docking_point, docking_orientation
 
 
-def calculate_odom_diff_pose(
-    start_odom_pose: Odometry, current_odom_pose: Odometry
-) -> PyKDL.Frame:
+def calculate_odom_diff_pose(start_odom_pose: Odometry, current_odom_pose: Odometry) -> PyKDL.Frame:
     """Function calculating difference between to odom poses returnig it as PyKDL Frame object.
 
     Args:
@@ -156,9 +171,7 @@ def calculate_odom_diff_pose(
     return diff_pose
 
 
-def angle_done_from_odom(
-    start_odom_pose: Odometry, current_odom_pose: Odometry
-) -> float:
+def angle_done_from_odom(start_odom_pose: Odometry, current_odom_pose: Odometry) -> float:
     """Function calculating angle done between two given odometry positions.
 
     Args:
@@ -177,9 +190,7 @@ def angle_done_from_odom(
     return angle
 
 
-def distance_done_from_odom(
-    start_odom_pose: Odometry, current_odom_pose: Odometry
-) -> float:
+def distance_done_from_odom(start_odom_pose: Odometry, current_odom_pose: Odometry) -> float:
     """Function calculating distance done between two given odometry positions.
 
     Args:
@@ -203,8 +214,8 @@ def visualize_position(
     orientation: PyKDL.Rotation.Quaternion,
     frame_id: str,
     child_frame_id: str,
-    seq: int,
     tf_broadcaster: tf2_ros.TransformBroadcaster,
+    stamp,
 ) -> None:
     """Function used for visualizing poses in rviz as transforms. Used only for debug.
 
@@ -233,8 +244,7 @@ def visualize_position(
     # filling header
     msg.child_frame_id = child_frame_id
     msg.header.frame_id = frame_id
-    msg.header.stamp = ROSClock().now().to_msg()
-    msg.header.seq = seq
+    msg.header.stamp = stamp
 
     # sending transform
     tf_broadcaster.sendTransform(msg)
@@ -298,7 +308,7 @@ def calculate_threshold_distances(board: BoardPose) -> Tuple[float, float]:
     x_cross = (perpend_coeff_b - coeff_b) / (coeff_a - perpend_coeff_a)
     y_cross = coeff_a * x_cross + coeff_b
 
-    y_dist = math.sqrt(x_cross ** 2 + y_cross ** 2)
+    y_dist = math.sqrt(x_cross**2 + y_cross**2)
 
     x_dist = math.sqrt((x_cross - position.x()) ** 2 + (y_cross - position.y()) ** 2)
 

@@ -1,7 +1,7 @@
 /**:
   ros__parameters:
     cam_base_topic: camera/image_raw
-    output_frame: ''
+    output_frame: 'base_link'
 
     marker_dict: 4X4_50
 

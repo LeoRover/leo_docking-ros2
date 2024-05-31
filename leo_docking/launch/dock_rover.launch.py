@@ -24,7 +24,7 @@ def generate_launch_description():
 
     aruco_tracker = Node(
         package="aruco_opencv",
-        executable="aruco_tracker",
+        executable="aruco_tracker_autostart",
         output={"both": {"screen", "log", "own_log"}},
         emulate_tty=True,
         parameters=[

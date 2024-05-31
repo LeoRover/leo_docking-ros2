@@ -1,11 +1,13 @@
 from threading import Event
+from time import sleep, time
 
-import rclpy
-from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
 import smach
 
 from aruco_opencv_msgs.msg import ArucoDetection
 from typing import List, Optional
+
+from leo_docking.state_machine_params import StartParams
+from leo_docking.utils import LoggerProto
 
 
 class StartState(smach.State):
@@ -13,34 +15,29 @@ class StartState(smach.State):
 
     def __init__(
         self,
-        node: rclpy.node.Node,
+        start_params: StartParams,
+        logger: LoggerProto,
         outcomes: Optional[List[str]] = None,
         input_keys: Optional[List[str]] = None,
-        timeout: int = 3,
         name: str = "Start",
     ):
-        if outcomes is None:
-            outcomes = ["board_not_found", "board_found", "preempted"]
-        if input_keys is None:
-            input_keys = ["action_goal", "action_feedback", "action_result"]
+        outcomes = ["board_not_found", "board_found", "preempted"] if outcomes is None else outcomes
+        input_keys = ["action_goal", "action_feedback", "action_result"] if input_keys is None else input_keys
         super().__init__(outcomes, input_keys)
-        self.node = node
-        self.timeout = self.node.declare_parameter("start_state/timeout", timeout).value
+        self.params = start_params
 
         self.board_flag: Event = Event()
+        self.board_id = None
 
         self.state_log_name = name
-        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE, depth=1)
-        self.board_sub = self.node.create_subscription(
-            ArucoDetection, "/aruco_detections", self.board_callback, qos_profile=qos
-        )
+        self.logger = logger
         self.reset_state()
 
     def reset_state(self):
         self.board_id = None
         self.board_flag.clear()
 
-    def board_callback(self, data: ArucoDetection):
+    def aruco_detection_cb(self, data: ArucoDetection):
         """Function called every time there is new ArucoDetection message published on the topic.
         Checks if the rover can see board with the desired id (passed as action goal).
         """
@@ -56,37 +53,30 @@ class StartState(smach.State):
         """Function called when the state catches preemption request.
         Removes all the publishers and subscribers of the state.
         """
-        self.node.get_logger().warning(f"Preemption request handling for '{self.state_log_name}' state.")
+        self.logger.warning(f"Preemption request handling for '{self.state_log_name}' state.")
         return super().service_preempt()
 
-    def execute(self, ud):
+    def execute(self, user_data):
         """Main state method, executed automatically on state entered"""
         self.reset_state()
 
-        self.board_id = ud.action_goal.board_id
-        self.node.get_logger().info(
-            f"Waiting for board detection. Required board_id: {self.board_id}"
-        )
+        self.board_id = user_data.action_goal.board_id
+        self.logger.info(f"Waiting for board detection. Required board_id: {self.board_id}")
 
-        rate = self.node.create_rate(10)
-        time_start = self.node.get_clock().now()
+        start_time = time()
         while not self.board_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
-                ud.action_result.result = f"{self.state_log_name}: state preempted."
+                user_data.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
-            secs = (self.node.get_clock().now() - time_start).nanoseconds//1e9
-            if secs > self.timeout:
-                self.node.get_logger().error("Didn't find a board. Docking failed.")
-                ud.action_result.result = (
-                    f"{self.state_log_name}: didn't find a board. Docking failed."
-                )
+            if time() - start_time > self.params.timeout:
+                self.logger.error(f"Couldn't find a board in {self.params.timeout} seconds. Docking failed.")
+                user_data.action_result.result = f"{self.state_log_name}: couldn't find a board. Docking failed."
                 return "board_not_found"
 
-            rate.sleep()
+            sleep(0.1)
 
-        ud.action_feedback.current_state = (
-            f"{self.state_log_name}: board with id: {self.board_id} found. "
-            f"Proceeding to 'Check Area' state."
+        user_data.action_feedback.current_state = (
+            f"{self.state_log_name}: board with id: {self.board_id} found. " f"Proceeding to 'Check Area' state."
         )
         return "board_found"

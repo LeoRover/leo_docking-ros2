@@ -1,186 +1,37 @@
 #!/usr/bin/env python3
 import rclpy
-import smach
-import smach_ros
+import tf2_ros
+from aruco_opencv_msgs.msg import ArucoDetection
+from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
 from rclpy.executors import MultiThreadedExecutor
-from smach_ros import ActionServerWrapper
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
+from sensor_msgs.msg import JointState
+from smach_ros import ActionServerWrapper, IntrospectionServer
+
+from leo_docking.states.docking_state_machine import DockingStateMachine
+
+from leo_docking.state_machine_params import StateMachineParams
+from std_msgs.msg import Float32
+
+from leo_docking.utils import visualize_position
 from leo_docking_msgs.action import PerformDocking
-
-from leo_docking.states.start import StartState
-from leo_docking.states.check_area import CheckArea
-from leo_docking.states.reach_docking_area import RideToDockArea, RotateToDockArea, RotateToBoard
-from leo_docking.states.reach_docking_pose import (
-    RotateToDockingPoint,
-    ReachDockingPoint,
-    ReachDockingOrientation,
-)
-from leo_docking.states.dock import Dock
-
-
-def create_state_machine(node) -> smach.StateMachine:
-    sm = smach.StateMachine(
-        outcomes=["ROVER DOCKED", "DOCKING FAILED", "DOCKING PREEMPTED"],
-        input_keys=["action_goal", "action_feedback", "action_result"],
-    )
-
-    with sm:
-        smach.StateMachine.add(
-            "Start",
-            StartState(node=node, timeout=5.0),
-            transitions={
-                "board_not_found": "DOCKING FAILED",
-                "board_found": "Check Area",
-                "preempted": "DOCKING PREEMPTED",
-            },
-            remapping={
-                "action_goal": "action_goal",
-                "action_feedback": "action_feedback",
-                "action_result": "action_result",
-            },
-        )
-
-        smach.StateMachine.add(
-            "Check Area",
-            CheckArea(node=node, timeout=5, threshold_angle=0.17),
-            transitions={
-                "board_lost": "DOCKING FAILED",
-                "docking_area": "Reach Docking Point",
-                "outside_docking_area": "Reach Docking Area",
-                "preempted": "DOCKING PREEMPTED",
-            },
-            remapping={
-                "target_pose": "docking_area_data",
-                "board_id": "action_goal",
-                "action_feedback": "action_feedback",
-                "action_result": "action_result",
-            },
-        )
-
-        reach_docking_area = smach.Sequence(
-            outcomes=["succeeded", "odometry_not_working", "preempted"],
-            connector_outcome="succeeded",
-            input_keys=["docking_area_data", "action_feedback", "action_result"],
-        )
-
-        with reach_docking_area:
-            smach.Sequence.add(
-                "Rotate To Dock Area",
-                RotateToDockArea(node=node, timeout=2.0),
-                remapping={
-                    "target_pose": "docking_area_data",
-                    "action_feedback": "action_feedback",
-                    "action_result": "action_result",
-                },
-            )
-            smach.Sequence.add(
-                "Ride To Area",
-                RideToDockArea(node=node, timeout=2.0),
-                remapping={
-                    "target_pose": "docking_area_data",
-                    "action_feedback": "action_feedback",
-                    "action_result": "action_result",
-                },
-            )
-            smach.Sequence.add(
-                "Rotate To Board",
-                RotateToBoard(node=node, timeout=2.0),
-                remapping={
-                    "target_pose": "docking_area_data",
-                    "action_feedback": "action_feedback",
-                    "action_result": "action_result",
-                },
-            )
-
-        smach.StateMachine.add(
-            "Reach Docking Area",
-            reach_docking_area,
-            transitions={
-                "succeeded": "Check Area",
-                "odometry_not_working": "DOCKING FAILED",
-                "preempted": "DOCKING PREEMPTED",
-            },
-            remapping={
-                "docking_area_data": "docking_area_data",
-                "action_feedback": "action_feedback",
-                "action_result": "action_result",
-            },
-        )
-
-        reach_docking_pose = smach.Sequence(
-            outcomes=["succeeded", "odometry_not_working", "board_lost", "preempted"],
-            connector_outcome="succeeded",
-            input_keys=["action_goal", "action_feedback", "action_result"],
-        )
-
-        with reach_docking_pose:
-            smach.Sequence.add(
-                "Rotate To Docking Point",
-                RotateToDockingPoint(node=node, timeout=2.0, docking_point_distance=0.8),
-            )
-
-            smach.Sequence.add(
-                "Reach Docking Point",
-                ReachDockingPoint(node=node, timeout=2.0, docking_point_distance=0.8),
-            )
-
-            smach.Sequence.add(
-                "Reach Docking Orientation",
-                ReachDockingOrientation(node=node, timeout=2.0, docking_point_distance=0.8),
-            )
-
-        smach.StateMachine.add(
-            "Reach Docking Point",
-            reach_docking_pose,
-            transitions={
-                "succeeded": "Dock",
-                "odometry_not_working": "DOCKING FAILED",
-                "board_lost": "DOCKING FAILED",
-                "preempted": "DOCKING PREEMPTED",
-            },
-            remapping={
-                "action_goal": "action_goal",
-                "action_feedback": "action_feedback",
-                "action_result": "action_result",
-            },
-        )
-
-        smach.StateMachine.add(
-            "Dock",
-            Dock(node=node, epsilon=0.05),
-            transitions={
-                "succeeded": "ROVER DOCKED",
-                "odometry_not_working": "DOCKING FAILED",
-                "board_lost": "DOCKING FAILED",
-                "preempted": "DOCKING PREEMPTED",
-            },
-            remapping={
-                "action_goal": "action_goal",
-                "action_feedback": "action_feedback",
-                "action_result": "action_result",
-            },
-        )
-
-    return sm
 
 
 class DockingServer(rclpy.node.Node):
     def __init__(self):
         super().__init__("docking_server")
-        self.declare_parameter("docking_point_distance", 0.6)
-        self.declare_parameter("debug", True)
-        self.declare_parameter("rotate_to_docking_point/timeout", 3)
-        self.declare_parameter("rotate_to_docking_point/epsilon", 0.01)
-        self.declare_parameter("rotate_to_docking_point/speed_min", 0.1)
-        self.declare_parameter("rotate_to_docking_point/speed_max", 0.4)
-        self.declare_parameter("rotate_to_docking_point/angle_min", 0.05)
-        self.declare_parameter("rotate_to_docking_point/angle_max", 1.0)
-        self._state_machine = create_state_machine(self)
+        self._state_machine_params = StateMachineParams(self)
+        self._state_machine = DockingStateMachine(
+            self._state_machine_params, self.get_logger(), self._publish_cmd_vel_cb, self._debug_visualizations_cb
+        )
+        self._init_ros()
 
         self._action_server_wrapper = ActionServerWrapper(
             node=self,
-            server_name="leo_docking_action_server",
+            server_name="/leo_rover/dock",
             action_spec=PerformDocking,
-            wrapped_container=self._state_machine,
+            wrapped_container=self._state_machine.state_machine,
             succeeded_outcomes=["ROVER DOCKED"],
             aborted_outcomes=["DOCKING FAILED"],
             preempted_outcomes=["DOCKING PREEMPTED"],
@@ -190,8 +41,68 @@ class DockingServer(rclpy.node.Node):
         )
 
         # Create and start the introspection server
-        self._smach_introspection_server = smach_ros.IntrospectionServer(
-            "leo_docking", self._state_machine, "/LEO_DOCKING"
+        self._smach_introspection_server = IntrospectionServer(
+            "leo_docking", self._state_machine.state_machine, "/LEO_DOCKING"
+        )
+
+    def _init_ros(self):
+        sub_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE, depth=1
+        )
+        self.create_subscription(ArucoDetection, "/aruco_detections", self._aruco_detection_cb, qos_profile=sub_qos)
+        self.create_subscription(Odometry, "/odometry/filtered/local", self._wheel_odom_cb, qos_profile=sub_qos)
+        self.create_subscription(Float32, "/firmware/battery", self._battery_cb, qos_profile=sub_qos)
+        self.create_subscription(JointState, "/joint_states", self._effort_cb, qos_profile=sub_qos)
+
+        pub_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.RELIABLE, durability=QoSDurabilityPolicy.VOLATILE, depth=1
+        )
+        self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel/nav2", qos_profile=pub_qos)
+
+        self.tf_broadcaster = tf2_ros.TransformBroadcaster(node=self)
+
+    def _aruco_detection_cb(self, msg: ArucoDetection):
+        self._state_machine.states["Start"]["state"].aruco_detection_cb(msg)
+        self._state_machine.states["Check Area"]["state"].aruco_detection_cb(msg)
+        self._state_machine.states["Rotate To Docking Point"]["state"].aruco_detection_cb(msg)
+        self._state_machine.states["Reach Docking Point"]["state"].aruco_detection_cb(msg)
+        self._state_machine.states["Reach Docking Point Orientation"]["state"].aruco_detection_cb(msg)
+        self._state_machine.states["Dock"]["state"].aruco_detection_cb(msg)
+
+    def _wheel_odom_cb(self, msg: Odometry):
+        self._state_machine.states["Rotate To Dock Area"]["state"].wheel_odom_cb(msg)
+        self._state_machine.states["Ride To Dock Area"]["state"].wheel_odom_cb(msg)
+        self._state_machine.states["Rotate To Board"]["state"].wheel_odom_cb(msg)
+        self._state_machine.states["Rotate To Docking Point"]["state"].wheel_odom_cb(msg)
+        self._state_machine.states["Reach Docking Point"]["state"].wheel_odom_cb(msg)
+        self._state_machine.states["Reach Docking Point Orientation"]["state"].wheel_odom_cb(msg)
+        self._state_machine.states["Dock"]["state"].wheel_odom_cb(msg)
+
+    def _battery_cb(self, msg: Float32):
+        self._state_machine.states["Dock"]["state"].battery_cb(msg)
+
+    def _effort_cb(self, msg: JointState):
+        self._state_machine.states["Dock"]["state"].effort_cb(msg)
+
+    def _publish_cmd_vel_cb(self, msg: Twist):
+        self.cmd_vel_pub.publish(msg)
+
+    def _debug_visualizations_cb(self, docking_point, docking_orientation, board_normalized):
+        visualize_position(
+            docking_point,
+            docking_orientation,
+            "base_link",
+            "docking_point",
+            self.tf_broadcaster,
+            self.get_clock().now().to_msg(),
+        )
+        visualize_position(
+            board_normalized.p,
+            board_normalized.M.GetQuaternion(),
+            "base_link",
+            "normalized_board",
+            self.tf_broadcaster,
+            self.get_clock().now().to_msg(),
         )
 
     def start(self):
@@ -217,4 +128,3 @@ if __name__ == "__main__":
     executor.shutdown()
     node.destroy_node()
     rclpy.try_shutdown()
-

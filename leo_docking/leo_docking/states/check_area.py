@@ -1,7 +1,7 @@
 import math
 from threading import Event
+from time import sleep, time
 
-import rclpy
 import smach
 
 from aruco_opencv_msgs.msg import ArucoDetection
@@ -11,11 +11,11 @@ import PyKDL
 from leo_docking.utils import (
     calculate_threshold_distances,
     get_location_points_from_board,
-    visualize_position,
+    LoggerProto,
 )
 from typing import List, Optional
 
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
+from leo_docking.state_machine_params import CheckAreaParams
 
 
 class CheckArea(smach.State):
@@ -25,40 +25,25 @@ class CheckArea(smach.State):
 
     def __init__(
         self,
-        node: rclpy.node.Node,
+        check_area_params: CheckAreaParams,
+        logger: LoggerProto,
         outcomes: Optional[List[str]] = None,
         input_keys: Optional[List[str]] = None,
         output_keys: Optional[List[str]] = None,
-        threshold_angle: float = 0.26,  # 15 degrees
-        docking_distance: float = 2.0,
-        timeout: int = 3,
         name: str = "Check Area",
     ):
-        if output_keys is None:
-            output_keys = ["target_pose"]
-        if input_keys is None:
-            input_keys = ["action_goal", "action_feedback", "action_result"]
-        if outcomes is None:
-            outcomes = ["docking_area", "outside_docking_area", "board_lost", "preempted"]
-        super().__init__(
-            outcomes=outcomes, input_keys=input_keys, output_keys=output_keys
-        )
+        output_keys = ["target_pose"] if output_keys is None else output_keys
+        input_keys = ["action_goal", "action_feedback", "action_result"] if input_keys is None else input_keys
+        outcomes = ["docking_area", "outside_docking_area", "board_lost", "preempted"] if outcomes is None else outcomes
+        super().__init__(outcomes=outcomes, input_keys=input_keys, output_keys=output_keys)
+        self.params = check_area_params
         self.board_id = None
         self.board = None
-        self.node = node
-
-        self.threshold_angle = self.node.declare_parameter("threshold_angle", threshold_angle).value
-        self.docking_distance = self.node.declare_parameter("docking_distance", docking_distance).value
-        self.timeout = self.node.declare_parameter("timeout", timeout).value
 
         self.board_flag = Event()
         self.state_log_name = name
 
-        qos = QoSProfile(reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE, depth=1)
-        self.board_sub = self.node.create_subscription(
-            ArucoDetection, "/aruco_detections", self.board_callback, qos_profile=qos
-        )
-
+        self.logger = logger
         self.reset_state()
 
     def reset_state(self):
@@ -66,7 +51,7 @@ class CheckArea(smach.State):
         self.board_flag.clear()
         self.board = None
 
-    def board_callback(self, data: ArucoDetection):
+    def aruco_detection_cb(self, data: ArucoDetection):
         """Function called every time there is new ArucoDetection message published on the topic.
         Saves the detected board's position for further calculations.
         """
@@ -87,7 +72,7 @@ class CheckArea(smach.State):
         Returns:
             True if rover is in the docking area, False otherwise
         """
-        max_value = math.tan(self.threshold_angle) * dist_x
+        max_value = math.tan(self.params.threshold_angle) * dist_x
 
         return dist_y <= max_value
 
@@ -95,7 +80,7 @@ class CheckArea(smach.State):
         """Function called when the state catches preemption request.
         Removes all the publishers and subscribers of the state.
         """
-        self.node.get_logger().warn(f"Preemption request handling for '{self.state_log_name}' state.")
+        self.logger.warning(f"Preemption request handling for '{self.state_log_name}' state.")
         return super().service_preempt()
 
     def execute(self, ud):
@@ -105,24 +90,20 @@ class CheckArea(smach.State):
         self.reset_state()
 
         self.board_id = ud.action_goal.board_id
-        self.node.get_logger().info(f"Waiting for board (id: {self.board_id}) detection.")
+        self.logger.info(f"Waiting for board (id: {self.board_id}) detection.")
 
-        rate = self.node.create_rate(10)
-        time_start = self.node.get_clock().now()
+        start_time = time()
         while not self.board_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
                 ud.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
-            secs = (self.node.get_clock().now() - time_start).nanoseconds//1e9
-            if secs > self.timeout:
-                self.node.get_logger().error(f"Board (id: {self.board_id}) lost. Docking failed.")
-                ud.action_result.result = (
-                    f"{self.state_log_name}: board lost. Docking failed."
-                )
+            if time() - start_time > self.params.timeout:
+                self.logger.error(f"Board (id: {self.board_id}) lost. Docking failed.")
+                ud.action_result.result = f"{self.state_log_name}: board lost. Docking failed."
                 return "board_lost"
 
-            rate.sleep()
+            sleep(0.1)
 
         # calculating the length of distances needed for threshold checking
         x_dist, y_dist = calculate_threshold_distances(self.board)
@@ -135,9 +116,7 @@ class CheckArea(smach.State):
             return "docking_area"
 
         # getting target pose
-        point, orientation = get_location_points_from_board(
-            self.board, self.docking_distance
-        )
+        point, orientation = get_location_points_from_board(self.board, self.params.docking_distance)
 
         target_pose = PyKDL.Frame(PyKDL.Rotation.Quaternion(*orientation), point)
 
