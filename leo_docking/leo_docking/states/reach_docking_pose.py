@@ -210,7 +210,6 @@ class BaseDockingState(smach.State):
         self.executing = True
         self.board_id = ud.action_goal.board_id
 
-        self.logger.error("START OF EXECUTE")
         start_time = time()
         while not self.board_flag.is_set() or not self.odom_flag.is_set():
             if self.preempt_requested():

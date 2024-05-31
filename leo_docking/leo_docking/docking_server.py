@@ -67,6 +67,7 @@ class DockingServer(rclpy.node.Node):
         self._state_machine.states["Rotate To Docking Point"]["state"].aruco_detection_cb(msg)
         self._state_machine.states["Reach Docking Point"]["state"].aruco_detection_cb(msg)
         self._state_machine.states["Reach Docking Point Orientation"]["state"].aruco_detection_cb(msg)
+        self._state_machine.states["Dock"]["state"].aruco_detection_cb(msg)
 
     def _wheel_odom_cb(self, msg: Odometry):
         self._state_machine.states["Rotate To Dock Area"]["state"].wheel_odom_cb(msg)
@@ -75,6 +76,7 @@ class DockingServer(rclpy.node.Node):
         self._state_machine.states["Rotate To Docking Point"]["state"].wheel_odom_cb(msg)
         self._state_machine.states["Reach Docking Point"]["state"].wheel_odom_cb(msg)
         self._state_machine.states["Reach Docking Point Orientation"]["state"].wheel_odom_cb(msg)
+        self._state_machine.states["Dock"]["state"].wheel_odom_cb(msg)
 
     def _battery_cb(self, msg: Float32):
         self._state_machine.states["Dock"]["state"].battery_cb(msg)
