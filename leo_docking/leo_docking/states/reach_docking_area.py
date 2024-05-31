@@ -158,12 +158,11 @@ class BaseDockAreaState(smach.State):
                 return "odometry_not_working"
 
             sleep(0.1)
-        self.logger.error(
-            f"FOUND ODOM MSGS."
-        )
+        self.logger.error(f"FOUND ODOM MSGS. {self.odom_reference}")
         target_pose: PyKDL.Frame = ud.target_pose
         # calculating route left
         route_left = self.calculate_route_left(target_pose)
+        self.logger.error(f"ROUTE LEFT. {route_left}")
         # moving the rover
         outcome = self.movement_loop(route_left, self.angle)
         if outcome:

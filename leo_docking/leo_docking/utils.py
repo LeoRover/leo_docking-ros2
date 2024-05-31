@@ -215,6 +215,7 @@ def visualize_position(
     frame_id: str,
     child_frame_id: str,
     tf_broadcaster: tf2_ros.TransformBroadcaster,
+    stamp,
 ) -> None:
     """Function used for visualizing poses in rviz as transforms. Used only for debug.
 
@@ -243,7 +244,7 @@ def visualize_position(
     # filling header
     msg.child_frame_id = child_frame_id
     msg.header.frame_id = frame_id
-    msg.header.stamp = ROSClock().now().to_msg()
+    msg.header.stamp = stamp
 
     # sending transform
     tf_broadcaster.sendTransform(msg)
