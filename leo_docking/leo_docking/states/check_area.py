@@ -123,8 +123,6 @@ class CheckArea(smach.State):
         # passing calculated data to next states
         ud.target_pose = target_pose
 
-        self.logger.error(f"Board: {self.board}, Target pose: {target_pose}")
-
         ud.action_feedback.current_state = (
             f"{self.state_log_name}: docking impossible from current position. "
             f"Proceeding to 'Reach Docking Area` sequence."

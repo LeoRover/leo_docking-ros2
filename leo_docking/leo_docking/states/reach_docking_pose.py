@@ -104,7 +104,6 @@ class BaseDockingState(smach.State):
         """Function performing rover movement; invoked in the "execute" method of the state."""
         msg = Twist()
 
-        self.logger.error("START OF MOVEMENT LOOP")
         while True:
             with self.route_lock:
                 if self.route_done + self.params.epsilon >= self.route_left:
