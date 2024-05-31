@@ -50,7 +50,6 @@ class Dock(BaseDockingState):
             debug_visualizations_cb,
             name=name,
         )
-        self.executing = False
         self.battery_lock: Lock = Lock()
         self.effort_lock: Lock = Lock()
         self.bias_left = 0.0
@@ -94,7 +93,7 @@ class Dock(BaseDockingState):
                 self.battery_reference = self.acc_data / float(self.counter)
             else:
                 # battery average level too high to notice difference
-                if self.battery_reference > self.global_params.max_battery_average:
+                if self.battery_reference is None or self.battery_reference > self.global_params.max_battery_average:
                     return
 
                 if data.data > self.battery_reference + self.global_params.battery_diff:
@@ -123,7 +122,6 @@ class Dock(BaseDockingState):
 
     def movement_loop(self) -> Optional[str]:
         """Function performing rover movement; invoked in the "execute" method of the state."""
-        self.executing = True
         self.logger.info("Waiting for motors effort and battery voltage to drop.")
         sleep(self.global_params.motor_cd_time)
 
@@ -175,7 +173,6 @@ class Dock(BaseDockingState):
 
                 self.publish_cmd_vel_cb(msg)
             sleep(0.1)
-        self.executing = False
         self.publish_cmd_vel_cb(Twist())
         return None
 
@@ -194,5 +191,4 @@ class Dock(BaseDockingState):
         self.bias_done = angle_done_from_odom(odom_reference, current_odom)
 
     def service_preempt(self):
-        self.executing = False
         return super().service_preempt()
