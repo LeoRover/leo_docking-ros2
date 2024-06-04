@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2023 Fictionlab sp. z o.o.
-# Copyright 2024 Karelics Oy Copyright 2024 Karelics Oy
+# Copyright 2024 Karelics Oy
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
