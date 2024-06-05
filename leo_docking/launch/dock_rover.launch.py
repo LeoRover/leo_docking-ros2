@@ -30,7 +30,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     """LeoRover docking launch."""
     launch_list = []
-    params_dir = os.path.join(get_package_share_directory("leo_docking"), "/params")
+    params_dir = os.path.join(get_package_share_directory("leo_docking"), "params")
     leo_docking = Node(
         package="leo_docking",
         executable="docking_server.py",
