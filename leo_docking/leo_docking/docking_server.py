@@ -66,18 +66,16 @@ class DockingServer(rclpy.node.Node):
         )
 
     def _init_ros(self):
-        sub_qos = QoSProfile(
-            reliability=QoSReliabilityPolicy.BEST_EFFORT, durability=QoSDurabilityPolicy.VOLATILE, depth=1
-        )
+        sub_qos = QoSProfile(depth=1)
         self.create_subscription(ArucoDetection, "/aruco_detections", self._aruco_detection_cb, qos_profile=sub_qos)
-        self.create_subscription(Odometry, "/odometry/filtered/local", self._wheel_odom_cb, qos_profile=sub_qos)
+        self.create_subscription(Odometry, "/wheel_odom_with_covariance", self._wheel_odom_cb, qos_profile=sub_qos)
         self.create_subscription(Float32, "/firmware/battery", self._battery_cb, qos_profile=sub_qos)
         self.create_subscription(JointState, "/joint_states", self._effort_cb, qos_profile=sub_qos)
 
         pub_qos = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE, durability=QoSDurabilityPolicy.VOLATILE, depth=1
         )
-        self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel/nav2", qos_profile=pub_qos)
+        self.cmd_vel_pub = self.create_publisher(Twist, "/cmd_vel", qos_profile=pub_qos)
 
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(node=self)
 
