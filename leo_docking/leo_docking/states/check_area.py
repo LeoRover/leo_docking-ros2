@@ -103,24 +103,24 @@ class CheckArea(smach.State):
         self.logger.warning(f"Preemption request handling for '{self.state_log_name}' state.")
         return super().service_preempt()
 
-    def execute(self, ud):
+    def execute(self, user_data):
         """Main state method invoked on state entered.
         Checks rover position and eventually calculates target pose of the rover.
         """
         self.reset_state()
 
-        self.board_id = ud.action_goal.board_id
+        self.board_id = user_data.action_goal.board_id
         self.logger.info(f"Waiting for board (id: {self.board_id}) detection.")
 
         start_time = time()
         while not self.board_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
-                ud.action_result.result = f"{self.state_log_name}: state preempted."
+                user_data.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
             if time() - start_time > self.params.timeout:
                 self.logger.error(f"Board (id: {self.board_id}) lost. Docking failed.")
-                ud.action_result.result = f"{self.state_log_name}: board lost. Docking failed."
+                user_data.action_result.result = f"{self.state_log_name}: board lost. Docking failed."
                 return "board_lost"
 
             sleep(0.1)
@@ -129,7 +129,7 @@ class CheckArea(smach.State):
         x_dist, y_dist = calculate_threshold_distances(self.board)
 
         if self.check_threshold(x_dist, y_dist):
-            ud.action_feedback.current_state = (
+            user_data.action_feedback.current_state = (
                 f"{self.state_log_name}: docking possible from current position. "
                 f"Proceeding to 'Reaching Docking Point` sequence."
             )
@@ -141,9 +141,9 @@ class CheckArea(smach.State):
         target_pose = PyKDL.Frame(PyKDL.Rotation.Quaternion(*orientation), point)
 
         # passing calculated data to next states
-        ud.target_pose = target_pose
+        user_data.target_pose = target_pose
 
-        ud.action_feedback.current_state = (
+        user_data.action_feedback.current_state = (
             f"{self.state_log_name}: docking impossible from current position. "
             f"Proceeding to 'Reach Docking Area` sequence."
         )

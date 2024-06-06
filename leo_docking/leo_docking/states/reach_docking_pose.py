@@ -222,30 +222,30 @@ class BaseDockingState(smach.State):
             if self.odom_reference:
                 self.calculate_route_done(self.odom_reference, self.current_odom)
 
-    def execute(self, ud):
+    def execute(self, user_data):
         """Main state method, executed automatically on state entered"""
         self.reset_state()
 
         self.executing = True
-        self.board_id = ud.action_goal.board_id
+        self.board_id = user_data.action_goal.board_id
 
         start_time = time()
         while not self.board_flag.is_set() or not self.odom_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
-                ud.action_result.result = f"{self.state_log_name}: state preempted."
+                user_data.action_result.result = f"{self.state_log_name}: state preempted."
                 self.executing = False
                 return "preempted"
 
             if time() - start_time > self.params.timeout:
                 if not self.board_flag.is_set():
                     self.logger.error(f"Board (id: {self.board_id}) lost. Docking failed.")
-                    ud.action_result.result = f"{self.state_log_name}: Board lost. Docking failed."
+                    user_data.action_result.result = f"{self.state_log_name}: Board lost. Docking failed."
                     self.executing = False
                     return "board_lost"
                 else:
                     self.logger.error("Didn't get wheel odometry message. Docking failed.")
-                    ud.action_result.result = f"{self.state_log_name}: wheel odometry not working. Docking failed."
+                    user_data.action_result.result = f"{self.state_log_name}: wheel odometry not working. Docking failed."
                     self.executing = False
                     return "odometry_not_working"
 
@@ -253,13 +253,13 @@ class BaseDockingState(smach.State):
 
         outcome = self.movement_loop()
         if outcome:
-            ud.action_result.result = f"{self.state_log_name}: state preempted."
+            user_data.action_result.result = f"{self.state_log_name}: state preempted."
             self.executing = False
             return "preempted"
 
-        ud.action_feedback.current_state = f"'Reach Docking Point': sequence completed. " f"Proceeding to 'Dock' state."
+        user_data.action_feedback.current_state = f"'Reach Docking Point': sequence completed. " f"Proceeding to 'Dock' state."
         if self.state_log_name == "Dock":
-            ud.action_result.result = "docking succeeded. Rover docked."
+            user_data.action_result.result = "docking succeeded. Rover docked."
 
         self.executing = False
         return "succeeded"

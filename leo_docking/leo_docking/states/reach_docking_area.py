@@ -158,7 +158,7 @@ class BaseDockAreaState(smach.State):
             self.params.speed_max,
         )
 
-    def execute(self, ud):
+    def execute(self, user_data):
         """Main state method, executed automatically on state entered"""
         self.reset_state()
 
@@ -166,30 +166,30 @@ class BaseDockAreaState(smach.State):
         while not self.odom_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
-                ud.action_result.result = f"{self.state_log_name}: state preempted."
+                user_data.action_result.result = f"{self.state_log_name}: state preempted."
                 return "preempted"
             if time() - start_time > self.params.timeout:
                 self.logger.error(
                     f"Couldn't get wheel odometry message in {self.params.timeout} seconds. Docking failed."
                 )
-                ud.action_result.result = f"{self.state_log_name}: No odom data. Docking failed."
+                user_data.action_result.result = f"{self.state_log_name}: No odom data. Docking failed."
                 return "odometry_not_working"
 
             sleep(0.1)
-        target_pose: PyKDL.Frame = ud.target_pose
+        target_pose: PyKDL.Frame = user_data.target_pose
         # calculating route left
         route_left = self.calculate_route_left(target_pose)
         # moving the rover
         outcome = self.movement_loop(route_left, self.angle)
         if outcome:
-            ud.action_result.result = f"{self.state_log_name}: state preempted."
+            user_data.action_result.result = f"{self.state_log_name}: state preempted."
             return "preempted"
 
         # passing the data to next state
         if self.output_len > 0:
-            ud.target_pose = target_pose
+            user_data.target_pose = target_pose
 
-        ud.action_feedback.current_state = (
+        user_data.action_feedback.current_state = (
             f"'Reach Docking Area`: sequence completed. " f"Proceeding to 'Check Area' state."
         )
         return "succeeded"
