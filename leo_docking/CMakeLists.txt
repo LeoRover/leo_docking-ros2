@@ -12,7 +12,6 @@ find_package(rclpy REQUIRED)
 find_package(action_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
-find_package(python3_pykdl REQUIRED)
 find_package(aruco_opencv REQUIRED)
 find_package(aruco_opencv_msgs REQUIRED)
 
