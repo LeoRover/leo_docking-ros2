@@ -1,4 +1,4 @@
-Leo Rover Docking
+# Leo Rover Docking
 
 This is a ROS 2 port of the leo_docking repo.
 Original repo: https://github.com/LeoRover/leo_docking
