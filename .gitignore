@@ -1,0 +1,16 @@
+*.pyc
+**/build/
+**/install/
+**/log/
+
+.pre_commit_cache/
+.idea/*
+.vscode
+.cache/*
+/venv
+
+*IfcConvert
+**/__pycache__/
+**.pytest_cache/
+**/htmlcov/
+.coverage
