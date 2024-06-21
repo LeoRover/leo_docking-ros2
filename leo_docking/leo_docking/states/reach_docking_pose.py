@@ -57,7 +57,10 @@ class BaseDockingState(smach.State):
         self,
         global_params: GlobalParams,
         local_params: Union[
-            RotateToDockingPointParams, ReachDockingPointParams, ReachDockingOrientationParams, DockParams
+            RotateToDockingPointParams,
+            ReachDockingPointParams,
+            ReachDockingOrientationParams,
+            DockParams,
         ],
         publish_cmd_vel_cb: Callable,
         logger: LoggerProto,
@@ -67,8 +70,16 @@ class BaseDockingState(smach.State):
         angle: bool = True,
         name: str = "",
     ):
-        outcomes = ["succeeded", "odometry_not_working", "board_lost", "preempted"] if outcomes is None else outcomes
-        input_keys = ["action_goal", "action_feedback", "action_result"] if input_keys is None else input_keys
+        outcomes = (
+            ["succeeded", "odometry_not_working", "board_lost", "preempted"]
+            if outcomes is None
+            else outcomes
+        )
+        input_keys = (
+            ["action_goal", "action_feedback", "action_result"]
+            if input_keys is None
+            else input_keys
+        )
         super().__init__(outcomes, input_keys)
         self.global_params = global_params
         self.params = local_params
@@ -163,7 +174,9 @@ class BaseDockingState(smach.State):
             self.params.speed_max,
         )
 
-    def calculate_route_done(self, odom_reference: Odometry, current_odom: Odometry) -> None:
+    def calculate_route_done(
+        self, odom_reference: Odometry, current_odom: Odometry
+    ) -> None:
         """Function calculating route done (either angle, or distance) from the odometry message
         saved in board callback (odom_reference), to the current position.
         Saves the calculated route in a class variable "route_done".
@@ -195,7 +208,9 @@ class BaseDockingState(smach.State):
                         board, distance=self.global_params.docking_point_dist
                     )
                     board_normalized = normalize_board(board)
-                    self.debug_visualizations_cb(docking_point, docking_orientation, board_normalized)
+                    self.debug_visualizations_cb(
+                        docking_point, docking_orientation, board_normalized
+                    )
 
                 with self.route_lock:
                     self.calculate_route_left(board)
@@ -233,18 +248,26 @@ class BaseDockingState(smach.State):
         while not self.board_flag.is_set() or not self.odom_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
-                user_data.action_result.result = f"{self.state_log_name}: state preempted."
+                user_data.action_result.result = (
+                    f"{self.state_log_name}: state preempted."
+                )
                 self.executing = False
                 return "preempted"
 
             if time() - start_time > self.params.timeout:
                 if not self.board_flag.is_set():
-                    self.logger.error(f"Board (id: {self.board_id}) lost. Docking failed.")
-                    user_data.action_result.result = f"{self.state_log_name}: Board lost. Docking failed."
+                    self.logger.error(
+                        f"Board (id: {self.board_id}) lost. Docking failed."
+                    )
+                    user_data.action_result.result = (
+                        f"{self.state_log_name}: Board lost. Docking failed."
+                    )
                     self.executing = False
                     return "board_lost"
                 else:
-                    self.logger.error("Didn't get wheel odometry message. Docking failed.")
+                    self.logger.error(
+                        "Didn't get wheel odometry message. Docking failed."
+                    )
                     user_data.action_result.result = f"{self.state_log_name}: wheel odometry not working. Docking failed."
                     self.executing = False
                     return "odometry_not_working"
@@ -257,7 +280,10 @@ class BaseDockingState(smach.State):
             self.executing = False
             return "preempted"
 
-        user_data.action_feedback.current_state = f"'Reach Docking Point': sequence completed. " f"Proceeding to 'Dock' state."
+        user_data.action_feedback.current_state = (
+            f"'Reach Docking Point': sequence completed. "
+            f"Proceeding to 'Dock' state."
+        )
         if self.state_log_name == "Dock":
             user_data.action_result.result = "docking succeeded. Rover docked."
 
@@ -268,7 +294,9 @@ class BaseDockingState(smach.State):
         """Function called when the state catches preemption request.
         Removes all the publishers and subscribers of the state.
         """
-        self.logger.error(f"Preemption request handling for {self.state_log_name} state")
+        self.logger.error(
+            f"Preemption request handling for {self.state_log_name} state"
+        )
         self.publish_cmd_vel_cb(Twist())
         self.executing = False
         return super().service_preempt()
@@ -301,11 +329,18 @@ class RotateToDockingPoint(BaseDockingState):
         )
 
     def calculate_route_left(self, board: BoardPose):
-        docking_point, _ = get_location_points_from_board(board, distance=self.global_params.docking_point_dist)
+        docking_point, _ = get_location_points_from_board(
+            board, distance=self.global_params.docking_point_dist
+        )
 
-        if math.sqrt(docking_point.y() ** 2 + docking_point.x() ** 2) < self.params.min_docking_point_distance:
+        if (
+            math.sqrt(docking_point.y() ** 2 + docking_point.x() ** 2)
+            < self.params.min_docking_point_distance
+        ):
             self.route_left = 0.0
-            self.logger.info("Rover to close to the docking point in the beginning of docking process.")
+            self.logger.info(
+                "Rover to close to the docking point in the beginning of docking process."
+            )
         else:
             angle = math.atan2(docking_point.y(), docking_point.x())
             self.movement_direction = 1 if angle >= 0 else -1
@@ -386,7 +421,9 @@ class ReachDockingPoint(BaseDockingState):
         return None
 
     def calculate_route_left(self, board: BoardPose):
-        docking_point, _ = get_location_points_from_board(board, distance=self.global_params.docking_point_dist)
+        docking_point, _ = get_location_points_from_board(
+            board, distance=self.global_params.docking_point_dist
+        )
 
         self.route_left = math.sqrt(docking_point.x() ** 2 + docking_point.y() ** 2)
         self.movement_direction = 1.0 if docking_point.x() >= 0 else -1.0
@@ -428,7 +465,9 @@ class ReachDockingOrientation(BaseDockingState):
         )
 
     def calculate_route_left(self, board: BoardPose):
-        _, docking_orientation = get_location_points_from_board(board, distance=self.global_params.docking_point_dist)
+        _, docking_orientation = get_location_points_from_board(
+            board, distance=self.global_params.docking_point_dist
+        )
 
         rot = PyKDL.Rotation.Quaternion(*docking_orientation)
         angle = rot.GetRPY()[2]

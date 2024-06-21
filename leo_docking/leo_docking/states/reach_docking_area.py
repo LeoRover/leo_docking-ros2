@@ -37,7 +37,11 @@ from leo_docking.utils import (
     LoggerProto,
 )
 
-from leo_docking.state_machine_params import RotateToDockAreaParams, RideToDockAreaParams, RotateToBoardParams
+from leo_docking.state_machine_params import (
+    RotateToDockAreaParams,
+    RideToDockAreaParams,
+    RotateToBoardParams,
+)
 
 
 class BaseDockAreaState(smach.State):
@@ -46,7 +50,9 @@ class BaseDockAreaState(smach.State):
 
     def __init__(
         self,
-        local_params: Union[RotateToDockAreaParams, RideToDockAreaParams, RotateToBoardParams],
+        local_params: Union[
+            RotateToDockAreaParams, RideToDockAreaParams, RotateToBoardParams
+        ],
         publish_cmd_vel_cb: Callable,
         logger: LoggerProto,
         outcomes: Optional[List[str]] = None,
@@ -55,8 +61,16 @@ class BaseDockAreaState(smach.State):
         angle: bool = True,
         name: str = "",
     ):
-        outcomes = ["succeeded", "odometry_not_working", "preempted"] if outcomes is None else outcomes
-        input_keys = ["target_pose", "action_feedback", "action_result"] if input_keys is None else input_keys
+        outcomes = (
+            ["succeeded", "odometry_not_working", "preempted"]
+            if outcomes is None
+            else outcomes
+        )
+        input_keys = (
+            ["target_pose", "action_feedback", "action_result"]
+            if input_keys is None
+            else input_keys
+        )
         output_keys = ["target_pose"] if output_keys is None else output_keys
         super().__init__(outcomes, input_keys, output_keys)
         self.params = local_params
@@ -81,7 +95,9 @@ class BaseDockAreaState(smach.State):
         self.odom_flag.clear()
         self.route_done = 0.0
 
-    def calculate_route_done(self, odom_reference: Odometry, current_odom: Odometry, angle: bool = True) -> None:
+    def calculate_route_done(
+        self, odom_reference: Odometry, current_odom: Odometry, angle: bool = True
+    ) -> None:
         """Function calculating route done (either angle, or distance)
         from the begining of the state (first received odometry message), to the current position.
         Saves the calculated route in a class variable "route_done".
@@ -141,7 +157,9 @@ class BaseDockAreaState(smach.State):
 
         return None
 
-    def _get_speed(self, route_left: float, route_done: float, direction: float) -> float:
+    def _get_speed(
+        self, route_left: float, route_done: float, direction: float
+    ) -> float:
         if self.angle:
             return direction * translate(
                 route_left - route_done,
@@ -166,13 +184,17 @@ class BaseDockAreaState(smach.State):
         while not self.odom_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
-                user_data.action_result.result = f"{self.state_log_name}: state preempted."
+                user_data.action_result.result = (
+                    f"{self.state_log_name}: state preempted."
+                )
                 return "preempted"
             if time() - start_time > self.params.timeout:
                 self.logger.error(
                     f"Couldn't get wheel odometry message in {self.params.timeout} seconds. Docking failed."
                 )
-                user_data.action_result.result = f"{self.state_log_name}: No odom data. Docking failed."
+                user_data.action_result.result = (
+                    f"{self.state_log_name}: No odom data. Docking failed."
+                )
                 return "odometry_not_working"
 
             sleep(0.1)
@@ -190,7 +212,8 @@ class BaseDockAreaState(smach.State):
             user_data.target_pose = target_pose
 
         user_data.action_feedback.current_state = (
-            f"'Reach Docking Area`: sequence completed. " f"Proceeding to 'Check Area' state."
+            f"'Reach Docking Area`: sequence completed. "
+            f"Proceeding to 'Check Area' state."
         )
         return "succeeded"
 
@@ -210,7 +233,9 @@ class BaseDockAreaState(smach.State):
         """Function called when the state catches preemption request.
         Removes all the publishers and subscribers of the state.
         """
-        self.logger.warning(f"Preemption request handling for {self.state_log_name} state")
+        self.logger.warning(
+            f"Preemption request handling for {self.state_log_name} state"
+        )
         self.publish_cmd_vel_cb(Twist())
         return super().service_preempt()
 
@@ -228,7 +253,9 @@ class RotateToDockArea(BaseDockAreaState):
         angle: bool = True,
         name: str = "Rotate Towards Area",
     ):
-        super().__init__(local_params, publish_cmd_vel_cb, logger, angle=angle, name=name)
+        super().__init__(
+            local_params, publish_cmd_vel_cb, logger, angle=angle, name=name
+        )
 
     def calculate_route_left(self, target_pose: PyKDL.Frame) -> float:
         position: PyKDL.Vector = target_pose.p
@@ -251,7 +278,9 @@ class RideToDockArea(BaseDockAreaState):
         angle: bool = False,
         name="Ride To Area",
     ):
-        super().__init__(local_params, publish_cmd_vel_cb, logger, angle=angle, name=name)
+        super().__init__(
+            local_params, publish_cmd_vel_cb, logger, angle=angle, name=name
+        )
 
     def calculate_route_left(self, target_pose: PyKDL.Frame) -> float:
         position: PyKDL.Vector = target_pose.p
@@ -275,7 +304,14 @@ class RotateToBoard(BaseDockAreaState):
     ):
         output_keys = [] if output_keys is None else output_keys
 
-        super().__init__(local_params, publish_cmd_vel_cb, logger, output_keys=output_keys, angle=angle, name=name)
+        super().__init__(
+            local_params,
+            publish_cmd_vel_cb,
+            logger,
+            output_keys=output_keys,
+            angle=angle,
+            name=name,
+        )
 
     def calculate_route_left(self, target_pose: PyKDL.Frame) -> float:
         position: PyKDL.Vector = target_pose.p
