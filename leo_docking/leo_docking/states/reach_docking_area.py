@@ -161,6 +161,9 @@ class BaseDockAreaState(smach.State):
         self, route_left: float, route_done: float, direction: float
     ) -> float:
         if self.angle:
+            assert isinstance(self.params, RotateToDockAreaParams) or isinstance(
+                self.params, RotateToBoardParams
+            )
             return direction * translate(
                 route_left - route_done,
                 self.params.angle_min,
@@ -168,6 +171,7 @@ class BaseDockAreaState(smach.State):
                 self.params.speed_min,
                 self.params.speed_max,
             )
+        assert isinstance(self.params, RideToDockArea)
         return direction * translate(
             route_left - route_done,
             self.params.dist_min,
