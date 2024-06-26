@@ -53,6 +53,8 @@ class Dock(BaseDockingState):
     - the effort on the wheel motors is high enough - the rover is pushing against the base
     """
 
+    params: DockParams
+
     def __init__(
         self,
         global_params: GlobalParams,
@@ -78,12 +80,14 @@ class Dock(BaseDockingState):
         self.end_time = 0.0
 
         self.charging = False
-        self.battery_reference = None
+        self.battery_reference: Optional[float] = None
         self.acc_data = 0.0
         self.counter = 0
 
         self.effort_stop = False
-        self.effort_buf = Queue(maxsize=self.global_params.effort_buffer_size)
+        self.effort_buf: Queue[float] = Queue(
+            maxsize=self.global_params.effort_buffer_size
+        )
         super().reset_state()
 
     def reset_state(self):

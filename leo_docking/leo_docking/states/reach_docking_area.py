@@ -245,6 +245,8 @@ class RotateToDockArea(BaseDockAreaState):
     responsible for rotating the rover towards target point in the area (default: 2m in straight
     line from docking base)."""
 
+    params: RotateToDockAreaParams
+
     def __init__(
         self,
         local_params: RotateToDockAreaParams,
@@ -270,6 +272,8 @@ class RideToDockArea(BaseDockAreaState):
     responsible for driving the rover to the target point in the area (default: 2m in straight line
     from docking base)"""
 
+    params: RideToDockAreaParams
+
     def __init__(
         self,
         local_params: RideToDockAreaParams,
@@ -292,6 +296,8 @@ class RideToDockArea(BaseDockAreaState):
 class RotateToBoard(BaseDockAreaState):
     """The third state of the sequence state machine getting rover to docking area;
     responsible for rotating the rover toward board on the docking base"""
+
+    params: RotateToBoardParams
 
     def __init__(
         self,

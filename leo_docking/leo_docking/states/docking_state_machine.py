@@ -18,7 +18,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-from typing import Callable
+from typing import Callable, Any
 
 from smach import StateMachine, Sequence
 
@@ -49,7 +49,7 @@ class DockingStateMachine:
         debug_visualizations_cb: Callable,
     ):
         self.params = state_machine_params
-        self.states = {
+        self.states: dict[str, dict[str, Any]] = {
             "Start": {
                 "state": StartState(self.params.start_params, logger),
                 "transitions": {

@@ -208,9 +208,10 @@ class BaseDockingState(smach.State):
                         board, distance=self.global_params.docking_point_dist
                     )
                     board_normalized = normalize_board(board)
-                    self.debug_visualizations_cb(
-                        docking_point, docking_orientation, board_normalized
-                    )
+                    if self.debug_visualizations_cb:
+                        self.debug_visualizations_cb(
+                            docking_point, docking_orientation, board_normalized
+                        )
 
                 with self.route_lock:
                     self.calculate_route_left(board)
@@ -308,6 +309,8 @@ class RotateToDockingPoint(BaseDockingState):
     (default: 0.6m in straight line from docking base).
     """
 
+    params: RotateToDockingPointParams
+
     def __init__(
         self,
         global_params: GlobalParams,
@@ -354,6 +357,8 @@ class ReachDockingPoint(BaseDockingState):
     Performs linear and angular movement, as it fixes it's orientation
     to be always looking on the docking point.
     """
+
+    params: ReachDockingPointParams
 
     def __init__(
         self,
@@ -443,6 +448,8 @@ class ReachDockingOrientation(BaseDockingState):
     responsible for rotating the rover toward board on the docking base - a position where the
     rover needs just to drive forward to reach the base.
     """
+
+    params: ReachDockingOrientationParams
 
     def __init__(
         self,
