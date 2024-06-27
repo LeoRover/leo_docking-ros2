@@ -50,10 +50,11 @@ def generate_launch_description():
         parameters=[
             os.path.join(params_dir, "aruco_tracker.yaml"),
             {
-                "board_descriptions_path": os.path.join(params_dir, "board_descriptions.yaml"),
+                "board_descriptions_path": os.path.join(
+                    params_dir, "board_descriptions.yaml"
+                ),
             },
         ],
-
     )
 
     launch_list += [

@@ -53,6 +53,8 @@ class Dock(BaseDockingState):
     - the effort on the wheel motors is high enough - the rover is pushing against the base
     """
 
+    params: DockParams
+
     def __init__(
         self,
         global_params: GlobalParams,
@@ -78,12 +80,14 @@ class Dock(BaseDockingState):
         self.end_time = 0.0
 
         self.charging = False
-        self.battery_reference = None
+        self.battery_reference: Optional[float] = None
         self.acc_data = 0.0
         self.counter = 0
 
         self.effort_stop = False
-        self.effort_buf = Queue(maxsize=self.global_params.effort_buffer_size)
+        self.effort_buf: Queue[float] = Queue(
+            maxsize=self.global_params.effort_buffer_size
+        )
         super().reset_state()
 
     def reset_state(self):
@@ -113,7 +117,10 @@ class Dock(BaseDockingState):
                 self.battery_reference = self.acc_data / float(self.counter)
             else:
                 # battery average level too high to notice difference
-                if self.battery_reference is None or self.battery_reference > self.global_params.max_battery_average:
+                if (
+                    self.battery_reference is None
+                    or self.battery_reference > self.global_params.max_battery_average
+                ):
                     return
 
                 if data.data > self.battery_reference + self.global_params.battery_diff:
@@ -158,17 +165,23 @@ class Dock(BaseDockingState):
         while True:
             with self.battery_lock:
                 if self.charging:
-                    self.logger.info(f"Docking stopped. Condition: battery charging detected.")
+                    self.logger.info(
+                        f"Docking stopped. Condition: battery charging detected."
+                    )
                     break
 
             with self.effort_lock:
                 if self.effort_stop:
-                    self.logger.info(f"Docking stopped. Condition: wheel motors effort rise detected.")
+                    self.logger.info(
+                        f"Docking stopped. Condition: wheel motors effort rise detected."
+                    )
                     break
 
             with self.route_lock:
                 if self.route_done + self.params.epsilon >= self.route_left:
-                    self.logger.info(f"Docking stopped. Condition: distance to board reached.")
+                    self.logger.info(
+                        f"Docking stopped. Condition: distance to board reached."
+                    )
                     break
 
                 msg.linear.x = self.movement_direction * translate(
@@ -198,7 +211,9 @@ class Dock(BaseDockingState):
 
     def calculate_route_left(self, board: BoardPose) -> None:
         normalized_board = normalize_board(board)
-        self.route_left = math.sqrt(normalized_board.p.x() ** 2 + normalized_board.p.y() ** 2)
+        self.route_left = math.sqrt(
+            normalized_board.p.x() ** 2 + normalized_board.p.y() ** 2
+        )
 
         # calculating the correction for the docking point
         dock_bias = math.atan2(normalized_board.p.y(), normalized_board.p.x())

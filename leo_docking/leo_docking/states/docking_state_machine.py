@@ -18,13 +18,17 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-from typing import Callable
+from typing import Callable, Any
 
 from smach import StateMachine, Sequence
 
 from leo_docking.states.start import StartState
 from leo_docking.states.check_area import CheckArea
-from leo_docking.states.reach_docking_area import RideToDockArea, RotateToDockArea, RotateToBoard
+from leo_docking.states.reach_docking_area import (
+    RideToDockArea,
+    RotateToDockArea,
+    RotateToBoard,
+)
 from leo_docking.states.reach_docking_pose import (
     RotateToDockingPoint,
     ReachDockingPoint,
@@ -45,7 +49,7 @@ class DockingStateMachine:
         debug_visualizations_cb: Callable,
     ):
         self.params = state_machine_params
-        self.states = {
+        self.states: dict[str, dict[str, Any]] = {
             "Start": {
                 "state": StartState(self.params.start_params, logger),
                 "transitions": {
@@ -75,7 +79,9 @@ class DockingStateMachine:
                 },
             },
             "Rotate To Dock Area": {
-                "state": RotateToDockArea(self.params.rotate_to_dock_area_params, publish_cmd_vel_cb, logger),
+                "state": RotateToDockArea(
+                    self.params.rotate_to_dock_area_params, publish_cmd_vel_cb, logger
+                ),
                 "remapping": {
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
@@ -83,7 +89,9 @@ class DockingStateMachine:
                 },
             },
             "Ride To Dock Area": {
-                "state": RideToDockArea(self.params.ride_to_dock_area_params, publish_cmd_vel_cb, logger),
+                "state": RideToDockArea(
+                    self.params.ride_to_dock_area_params, publish_cmd_vel_cb, logger
+                ),
                 "remapping": {
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
@@ -91,7 +99,9 @@ class DockingStateMachine:
                 },
             },
             "Rotate To Board": {
-                "state": RotateToBoard(self.params.rotate_to_board_params, publish_cmd_vel_cb, logger),
+                "state": RotateToBoard(
+                    self.params.rotate_to_board_params, publish_cmd_vel_cb, logger
+                ),
                 "remapping": {
                     "target_pose": "docking_area_data",
                     "action_feedback": "action_feedback",
@@ -250,7 +260,15 @@ class DockingStateMachine:
         )
 
         with reach_docking_pose:
-            Sequence.add("Rotate To Docking Point", self.states["Rotate To Docking Point"]["state"])
-            Sequence.add("Reach Docking Point", self.states["Reach Docking Point"]["state"])
-            Sequence.add("Reach Docking Orientation", self.states["Reach Docking Point Orientation"]["state"]),
+            Sequence.add(
+                "Rotate To Docking Point",
+                self.states["Rotate To Docking Point"]["state"],
+            )
+            Sequence.add(
+                "Reach Docking Point", self.states["Reach Docking Point"]["state"]
+            )
+            Sequence.add(
+                "Reach Docking Orientation",
+                self.states["Reach Docking Point Orientation"]["state"],
+            ),
         return reach_docking_pose

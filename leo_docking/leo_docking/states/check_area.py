@@ -53,9 +53,19 @@ class CheckArea(smach.State):
         name: str = "Check Area",
     ):
         output_keys = ["target_pose"] if output_keys is None else output_keys
-        input_keys = ["action_goal", "action_feedback", "action_result"] if input_keys is None else input_keys
-        outcomes = ["docking_area", "outside_docking_area", "board_lost", "preempted"] if outcomes is None else outcomes
-        super().__init__(outcomes=outcomes, input_keys=input_keys, output_keys=output_keys)
+        input_keys = (
+            ["action_goal", "action_feedback", "action_result"]
+            if input_keys is None
+            else input_keys
+        )
+        outcomes = (
+            ["docking_area", "outside_docking_area", "board_lost", "preempted"]
+            if outcomes is None
+            else outcomes
+        )
+        super().__init__(
+            outcomes=outcomes, input_keys=input_keys, output_keys=output_keys
+        )
         self.params = check_area_params
         self.board_id = None
         self.board = None
@@ -100,7 +110,9 @@ class CheckArea(smach.State):
         """Function called when the state catches preemption request.
         Removes all the publishers and subscribers of the state.
         """
-        self.logger.warning(f"Preemption request handling for '{self.state_log_name}' state.")
+        self.logger.warning(
+            f"Preemption request handling for '{self.state_log_name}' state."
+        )
         return super().service_preempt()
 
     def execute(self, user_data):
@@ -116,11 +128,15 @@ class CheckArea(smach.State):
         while not self.board_flag.is_set():
             if self.preempt_requested():
                 self.service_preempt()
-                user_data.action_result.result = f"{self.state_log_name}: state preempted."
+                user_data.action_result.result = (
+                    f"{self.state_log_name}: state preempted."
+                )
                 return "preempted"
             if time() - start_time > self.params.timeout:
                 self.logger.error(f"Board (id: {self.board_id}) lost. Docking failed.")
-                user_data.action_result.result = f"{self.state_log_name}: board lost. Docking failed."
+                user_data.action_result.result = (
+                    f"{self.state_log_name}: board lost. Docking failed."
+                )
                 return "board_lost"
 
             sleep(0.1)
@@ -136,7 +152,9 @@ class CheckArea(smach.State):
             return "docking_area"
 
         # getting target pose
-        point, orientation = get_location_points_from_board(self.board, self.params.docking_distance)
+        point, orientation = get_location_points_from_board(
+            self.board, self.params.docking_distance
+        )
 
         target_pose = PyKDL.Frame(PyKDL.Rotation.Quaternion(*orientation), point)
 

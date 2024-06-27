@@ -96,7 +96,9 @@ def pose_to_frame(pose: Pose) -> PyKDL.Frame:
 
     # creating frame
     out_frame: PyKDL.Frame = PyKDL.Frame(
-        PyKDL.Rotation.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w),
+        PyKDL.Rotation.Quaternion(
+            orientation.x, orientation.y, orientation.z, orientation.w
+        ),
         PyKDL.Vector(position.x, position.y, 0.0),
     )
 
@@ -164,7 +166,9 @@ def get_location_points_from_board(
     return docking_point, docking_orientation
 
 
-def calculate_odom_diff_pose(start_odom_pose: Odometry, current_odom_pose: Odometry) -> PyKDL.Frame:
+def calculate_odom_diff_pose(
+    start_odom_pose: Odometry, current_odom_pose: Odometry
+) -> PyKDL.Frame:
     """Function calculating difference between to odom poses returnig it as PyKDL Frame object.
 
     Args:
@@ -185,7 +189,9 @@ def calculate_odom_diff_pose(start_odom_pose: Odometry, current_odom_pose: Odome
     return diff_pose
 
 
-def angle_done_from_odom(start_odom_pose: Odometry, current_odom_pose: Odometry) -> float:
+def angle_done_from_odom(
+    start_odom_pose: Odometry, current_odom_pose: Odometry
+) -> float:
     """Function calculating angle done between two given odometry positions.
 
     Args:
@@ -204,7 +210,9 @@ def angle_done_from_odom(start_odom_pose: Odometry, current_odom_pose: Odometry)
     return angle
 
 
-def distance_done_from_odom(start_odom_pose: Odometry, current_odom_pose: Odometry) -> float:
+def distance_done_from_odom(
+    start_odom_pose: Odometry, current_odom_pose: Odometry
+) -> float:
     """Function calculating distance done between two given odometry positions.
 
     Args:
@@ -322,7 +330,7 @@ def calculate_threshold_distances(board: BoardPose) -> Tuple[float, float]:
     x_cross = (perpend_coeff_b - coeff_b) / (coeff_a - perpend_coeff_a)
     y_cross = coeff_a * x_cross + coeff_b
 
-    y_dist = math.sqrt(x_cross**2 + y_cross**2)
+    y_dist = math.sqrt(x_cross ** 2 + y_cross ** 2)
 
     x_dist = math.sqrt((x_cross - position.x()) ** 2 + (y_cross - position.y()) ** 2)
 
